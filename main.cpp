@@ -11,26 +11,37 @@
 
 using namespace llast;
 
+void demo() {
+
+    {
+        ExpressionTreeContext ctx;
+
+        auto expr1 = ctx.newBinary(
+                ctx.newLiteralInt32(10),
+                OperationKind::Add,
+                ctx.newLiteralInt32(11));
+
+        auto expr2 = ctx.newBinary(
+                ctx.newLiteralInt32(20),
+                OperationKind::Sub,
+                ctx.newLiteralInt32(21));
+
+        auto expr3 = ctx.newConditional(
+                ctx.newLiteralInt32(1),
+                ctx.newLiteralInt32(30),
+                ctx.newLiteralInt32(31));
+
+        auto blockExpr = ctx.newBlock({expr1, expr2, expr3});
+
+        PrettyPrinter visitor(std::cout);
+        ExpressionTreeWalker walker(&visitor);
+
+        walker.walk(blockExpr);
+    }
+}
+
 int main() {
 
-    ExpressionTreeContext context;
-
-    auto expr1 = context.newBinaryExpression(
-            context.newLiteralInt32(10),
-            OperationType::Add,
-            context.newLiteralInt32(11));
-
-    auto expr2 =  context.newBinaryExpression(
-            context.newLiteralInt32(20),
-            OperationType::Sub,
-            context.newLiteralInt32(21));
-
-    auto blockExpr = context.newBlock({expr1, expr2});
-
-    PrettyPrinter visitor(std::cout);
-    ExpressionTreeWalker walker(&visitor);
-
-    walker.walk(blockExpr);
-
+    demo();
     return 0;
 }

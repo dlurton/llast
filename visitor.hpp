@@ -18,13 +18,17 @@ namespace llast {
         /** Executes after every node is visited. */
         virtual void visitedNode(const Expression *expr) { }
 
-        virtual void visiting(const BlockExpression *expr) { }
-        virtual void visited(const BlockExpression *expr) { }
+        virtual void visitingBlock(const BlockExpression *expr) { }
+        virtual void visitedBlock(const BlockExpression *expr) { }
 
-        virtual void visiting(const BinaryExpression *expr) { }
-        virtual void visited(const BinaryExpression *expr) { }
+        virtual void visitingConditional(const ConditionalExpression *expr) { }
+        virtual void visitedConditional(const ConditionalExpression *expr) { }
 
-        virtual void visit(const LiteralInt32Expression *expr) { }
+        virtual void visitingBinary(const BinaryExpression *expr) { }
+        virtual void visitedBinary(const BinaryExpression *expr) { }
+
+        virtual void visitLiteralInt32(const LiteralInt32Expression *expr) { }
+
     };
 
     /** Default tree walker, suitable for most purposes */
@@ -36,37 +40,77 @@ namespace llast {
 
         }
 
-        virtual void walk(const Expression *expr) {
-            visitor_->visitingNode(expr);
+        virtual ~ExpressionTreeWalker() {
 
+        }
+
+
+        virtual void walk(const Expression *expr) const {
+            ARG_NOT_NULL(expr);
             switch (expr->expressionType()) {
-                case ExpressionType::Block: {
-                    auto blockExpr = (BlockExpression *) expr;
-                    visitor_->visiting(blockExpr);
-                    blockExpr->forEach([this](Expression *childExpr) { this->walk(childExpr); });
-                    visitor_->visited(blockExpr);
+                case ExpressionKind::LiteralInt32:
+                    walkLiteralInt32((LiteralInt32Expression*)expr);
                     break;
-                }
-                case ExpressionType::LiteralInt32: {
-                    auto literalInt32 = (LiteralInt32Expression *) expr;
-                    visitor_->visit(literalInt32);
+                case ExpressionKind::Binary:
+                    walkBinary((BinaryExpression*)expr);
                     break;
-                }
-                case ExpressionType::Binary: {
-                    auto binaryExpr = (BinaryExpression*)expr;
-                    visitor_->visiting(binaryExpr);
-                    walk(binaryExpr->rValue());
-                    walk(binaryExpr->lValue());
-                    visitor_->visited(binaryExpr);
+                case ExpressionKind::Block:
+                    walkBlock((BlockExpression*)expr);
                     break;
-                }
+                case ExpressionKind::Conditional:
+                    walkConditional((ConditionalExpression*)expr);
+                    break;
                 default:
                     throw UnhandledSwitchCase();
             }
-
-            visitor_->visitedNode(expr);
         }
 
+        void walkBlock(const BlockExpression *blockExpr) const {
+            ARG_NOT_NULL(blockExpr);
+            visitor_->visitingNode(blockExpr);
+            visitor_->visitingBlock(blockExpr);
+
+            blockExpr->forEach([this](Expression *childExpr) { walk(childExpr); });
+
+            visitor_->visitedBlock(blockExpr);
+            visitor_->visitedNode(blockExpr);
+        }
+
+        void walkBinary(const BinaryExpression *binaryExpr) const {
+            ARG_NOT_NULL(binaryExpr);
+            visitor_->visitingNode(binaryExpr);
+            visitor_->visitingBinary(binaryExpr);
+
+            walk(binaryExpr->rValue());
+            walk(binaryExpr->lValue());
+
+            visitor_->visitedBinary(binaryExpr);
+            visitor_->visitedNode(binaryExpr);
+        }
+
+        void walkConditional(ConditionalExpression *conditionalExpr) const {
+            ARG_NOT_NULL(conditionalExpr);
+            visitor_->visitingNode(conditionalExpr);
+            visitor_->visitingConditional(conditionalExpr);
+
+            walk(conditionalExpr->condition());
+            if(conditionalExpr->truePart())
+                walk(conditionalExpr->truePart());
+
+            if(conditionalExpr->falsePart())
+                walk(conditionalExpr->falsePart());
+
+            visitor_->visitedConditional(conditionalExpr);
+            visitor_->visitedNode(conditionalExpr);
+        }
+
+
+        void walkLiteralInt32(const LiteralInt32Expression *expr) const {
+            ARG_NOT_NULL(expr);
+            visitor_->visitingNode(expr);
+            visitor_->visitLiteralInt32(expr);
+            visitor_->visitedNode(expr);
+        }
     };
 
 }

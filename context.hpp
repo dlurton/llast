@@ -10,7 +10,7 @@ namespace llast {
      * When an instance of Context is destroyed, so is all of the expressions it has created.
      */
     class ExpressionTreeContext {
-        std::vector<Expression *> ownedNodes_;
+        std::vector<Expression*> ownedNodes_;
 
     private:
 
@@ -35,7 +35,7 @@ namespace llast {
         /** Creates a new BlockExpression from a pair of iterators. */
         template<typename Iterator>
         BlockExpression *newBlock(Iterator begin, Iterator end) {
-            std::vector < Expression * > expressions;
+            std::vector<Expression*> expressions;
 
             for (; begin != end; ++begin)
                 expressions.push_back(*begin);
@@ -47,8 +47,12 @@ namespace llast {
             return addNode_(new LiteralInt32Expression(value));
         }
 
-        BinaryExpression *newBinaryExpression(Expression *lValue, OperationType operation, Expression *rValue) {
+        BinaryExpression *newBinary(Expression *lValue, OperationKind operation, Expression *rValue) {
             return addNode_(new BinaryExpression(lValue, operation, rValue));
+        }
+
+        ConditionalExpression *newConditional(Expression *condition, Expression *truePart, Expression *falsePart) {
+            return addNode_(new ConditionalExpression(condition, truePart, falsePart));
         }
    };
 }

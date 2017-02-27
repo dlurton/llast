@@ -8,7 +8,7 @@
 
 namespace llast {
 
-    enum class ExpressionType {
+    enum class ExpressionKind {
         Binary,
         Invoke,
         VarRef,
@@ -19,21 +19,21 @@ namespace llast {
     };
 
 
-    std::string to_string(ExpressionType expressionType) {
+    std::string to_string(ExpressionKind expressionType) {
         switch (expressionType) {
-            case ExpressionType::Binary:
+            case ExpressionKind::Binary:
                 return "Binary";
-            case ExpressionType::Invoke:
+            case ExpressionKind::Invoke:
                 return "Invoke";
-            case ExpressionType::VarRef:
+            case ExpressionKind::VarRef:
                 return "VarRef";
-            case ExpressionType::Conditional:
+            case ExpressionKind::Conditional:
                 return "Conditional";
-            case ExpressionType::Switch:
+            case ExpressionKind::Switch:
                 return "Switch";
-            case ExpressionType::Block:
+            case ExpressionKind::Block:
                 return "Block";
-            case ExpressionType::LiteralInt32:
+            case ExpressionKind::LiteralInt32:
                 return "LiteralInt";
             default:
                 throw UnhandledSwitchCase();
@@ -41,7 +41,7 @@ namespace llast {
     }
 
 
-    enum class OperationType {
+    enum class OperationKind {
         Assign,
         Add,
         Sub,
@@ -50,17 +50,17 @@ namespace llast {
     };
 
 
-    std::string to_string(OperationType type) {
+    std::string to_string(OperationKind type) {
         switch (type) {
-            case OperationType::Assign:
+            case OperationKind::Assign:
                 return "Assign";
-            case OperationType::Add:
+            case OperationKind::Add:
                 return "Add";
-            case OperationType::Sub:
+            case OperationKind::Sub:
                 return "Sub";
-            case OperationType::Mul:
+            case OperationKind::Mul:
                 return "Mul";
-            case OperationType::Div:
+            case OperationKind::Div:
                 return "Div";
         }
     }
@@ -92,7 +92,9 @@ namespace llast {
     /** Base class for all expressions. */
     class Expression {
     public:
-        virtual ExpressionType expressionType() const = 0;
+
+        virtual ~Expression() { }
+        virtual ExpressionKind expressionType() const = 0;
 
         virtual DataType dataType() const { return DataType::Void; }
     };
@@ -101,16 +103,21 @@ namespace llast {
     class LiteralInt32Expression : public Expression {
         const int value_;
     public:
-        ExpressionType expressionType() const {
-            return ExpressionType::LiteralInt32;
+
+        LiteralInt32Expression(const int value) : value_(value) {
+
+        }
+
+        virtual ~LiteralInt32Expression() {
+
+        }
+
+        ExpressionKind expressionType() const {
+            return ExpressionKind::LiteralInt32;
         }
 
         DataType dataType() const {
             return DataType::Int32;
-        }
-
-        LiteralInt32Expression(const int value) : value_(value) {
-
         }
 
         const int value() const {
@@ -120,21 +127,25 @@ namespace llast {
 
     class BinaryExpression : public Expression {
         const Expression *lValue_;
-        const OperationType operation_;
+        const OperationKind operation_;
         const Expression *rValue_;
 
     public:
-        ExpressionType expressionType() const {
-            return ExpressionType::Binary;
+        BinaryExpression(Expression *lValue, OperationKind operation, Expression *rValue)
+                : lValue_(lValue), operation_(operation), rValue_(rValue) {
+        }
+
+        virtual ~BinaryExpression() {
+
+        }
+
+        ExpressionKind expressionType() const {
+            return ExpressionKind::Binary;
         }
 
         /** The data type of an rValue expression is always the same as the rValue's data type. */
         DataType dataType() const {
             return rValue_->dataType();
-        }
-
-        BinaryExpression(Expression *lValue, OperationType operation, Expression *rValue)
-                : lValue_(lValue), operation_(operation), rValue_(rValue) {
         }
 
         const Expression *lValue() const {
@@ -145,19 +156,25 @@ namespace llast {
             return rValue_;
         }
 
-        OperationType operation() const {
+        OperationKind operation() const {
             return operation_;
         }
     };
 
-
     /** Contains a series of expressions, such as a method body, or one of the if-then-else parts. */
     class BlockExpression : public Expression {
         const std::vector<Expression *> expressions_;
-
     public:
-        ExpressionType expressionType() const {
-            return ExpressionType::Block;
+        BlockExpression(std::vector<Expression *> expressions) : expressions_(expressions) {
+
+        }
+
+        virtual ~BlockExpression() {
+
+        }
+
+        ExpressionKind expressionType() const {
+            return ExpressionKind::Block;
         }
 
         /** The data type of a block expression is always the data type of the last expression in the block. */
@@ -165,15 +182,52 @@ namespace llast {
             return expressions_.back()->dataType();
         }
 
-        BlockExpression(std::vector<Expression *> expressions) : expressions_(expressions) {
-
-        }
-
-        void forEach(std::function<void(Expression*)> func) {
+        void forEach(std::function<void(Expression*)> func) const {
             for(Expression *expr : expressions_)
                 func(expr);
         }
     };
 
+    class ConditionalExpression : public Expression {
+        Expression *condition_;
+        Expression *truePart_;
+        Expression *falsePart_;
+
+    public:
+        ConditionalExpression(Expression *condition, Expression *truePart, Expression *falsePart)
+                : condition_(condition), truePart_(truePart), falsePart_(falsePart) {
+
+            ARG_NOT_NULL(condition);
+        }
+
+        ExpressionKind expressionType() const {
+            return ExpressionKind::Conditional;
+        }
+
+        /** The data type of a block expression is always the data type of the last expression in the block. */
+        DataType dataType() const {
+            if(truePart_ != nullptr) {
+                return truePart_->dataType();
+            } else {
+                if(falsePart_ == nullptr) {
+                    return DataType::Void;
+                } else {
+                    return falsePart_->dataType();
+                }
+            }
+        }
+
+        Expression *condition() {
+            return condition_;
+        }
+
+        Expression *truePart() {
+            return truePart_;
+        }
+
+        Expression *falsePart() {
+            return falsePart_;
+        }
+    };
 
 }

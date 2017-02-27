@@ -22,6 +22,8 @@ namespace llast {
     public:
 
         PrettyPrinter(std::ostream &out) : out_(out) { }
+        ~PrettyPrinter() { }
+
 
         void visitingNode(const Expression *expr) {
             indent_++;
@@ -29,28 +31,28 @@ namespace llast {
             writeTabs();
         }
 
+
         void visitedNode(const Expression *expr) {
             indent_--;
         }
 
-        void visiting(const BlockExpression *expr) {
+
+        void visitingBlock(const BlockExpression *expr) {
             out_ << "{";
         }
 
-        void visited(const BlockExpression *expr) {
+        void visitedBlock(const BlockExpression *expr) {
 
             out_ << "}";
         }
 
-        void visiting(const BinaryExpression *expr) {
+
+        void visitingBinary(const BinaryExpression *expr) {
             out_ << to_string(expr->operation());
         }
 
-
-        void visit(const LiteralInt32Expression *expr) {
+        void visitLiteralInt32(const LiteralInt32Expression *expr) {
             out_ << std::to_string(expr->value());
         }
-
-
     };
 }
