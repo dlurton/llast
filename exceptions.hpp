@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <iostream>
+
 namespace llast {
 
     class Exception {
@@ -10,6 +13,7 @@ namespace llast {
             //TODO: store traceback/stacktrace/whatever.
             // http://stackoverflow.com/questions/3151779/how-its-better-to-invoke-gdb-from-program-to-print-its-stacktrace/4611112#4611112
         }
+
         virtual ~Exception() { }
 
         void dump() {

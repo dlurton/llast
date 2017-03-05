@@ -1,10 +1,18 @@
-
 #pragma once
 
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <functional>
+#include <bits/unique_ptr.h>
 
 #include "exceptions.hpp"
+
+/** Rules for AST nodes:
+ *      - Every node shall "own" its child nodes so that when a node is deleted, all of its children are also deleted.
+ *      - Thou shalt not modify any AST node after it has been created.
+ *      - More rules may come at another time.
+ */
 
 namespace llast {
 
@@ -17,29 +25,7 @@ namespace llast {
         Block,
         LiteralInt32,
     };
-
-
-    std::string to_string(ExpressionKind expressionType) {
-        switch (expressionType) {
-            case ExpressionKind::Binary:
-                return "Binary";
-            case ExpressionKind::Invoke:
-                return "Invoke";
-            case ExpressionKind::VarRef:
-                return "VarRef";
-            case ExpressionKind::Conditional:
-                return "Conditional";
-            case ExpressionKind::Switch:
-                return "Switch";
-            case ExpressionKind::Block:
-                return "Block";
-            case ExpressionKind::LiteralInt32:
-                return "LiteralInt";
-            default:
-                throw UnhandledSwitchCase();
-        }
-    }
-
+    std::string to_string(ExpressionKind expressionType);
 
     enum class OperationKind {
         Assign,
@@ -48,23 +34,7 @@ namespace llast {
         Mul,
         Div
     };
-
-
-    std::string to_string(OperationKind type) {
-        switch (type) {
-            case OperationKind::Assign:
-                return "Assign";
-            case OperationKind::Add:
-                return "Add";
-            case OperationKind::Sub:
-                return "Sub";
-            case OperationKind::Mul:
-                return "Mul";
-            case OperationKind::Div:
-                return "Div";
-        }
-    }
-
+    std::string to_string(OperationKind type);
 
     enum class DataType {
         Void,
@@ -72,45 +42,25 @@ namespace llast {
         Int32,
         Pointer
     };
-
-
-    std::string to_string(DataType dataType) {
-        switch (dataType) {
-            case DataType::Void:
-                return "void";
-            case DataType::Bool:
-                return "Bool";
-            case DataType::Int32:
-                return "Int32";
-            case DataType::Pointer:
-                return "Pointer";
-            default:
-                throw UnhandledSwitchCase();
-        }
-    }
+    std::string to_string(DataType dataType);
 
     /** Base class for all expressions. */
-    class Expression {
+    class Expr {
     public:
-
-        virtual ~Expression() { }
+        virtual ~Expr() { }
         virtual ExpressionKind expressionType() const = 0;
 
         virtual DataType dataType() const { return DataType::Void; }
+
     };
 
-
-    class LiteralInt32Expression : public Expression {
-        const int value_;
+    /** Represents an expression that is a literal 32 bit integer. */
+    class LiteralInt32 : public Expr {
+        int const value_;
     public:
+        LiteralInt32(const int value) : value_(value) { }
 
-        LiteralInt32Expression(const int value) : value_(value) {
-
-        }
-
-        virtual ~LiteralInt32Expression() {
-
-        }
+        virtual ~LiteralInt32() { }
 
         ExpressionKind expressionType() const {
             return ExpressionKind::LiteralInt32;
@@ -125,19 +75,19 @@ namespace llast {
         }
     };
 
-    class BinaryExpression : public Expression {
-        const Expression *lValue_;
+    /** Represents a binary expression, i.e. 1 + 2 or foo + bar */
+    class Binary : public Expr {
+        const std::unique_ptr<const Expr> lValue_;
         const OperationKind operation_;
-        const Expression *rValue_;
-
+        const std::unique_ptr<const Expr> rValue_;
     public:
-        BinaryExpression(Expression *lValue, OperationKind operation, Expression *rValue)
+
+        /** Constructs a new Binary expression.  Note: assumes ownership of lValue and rValue */
+        Binary(const Expr *lValue, OperationKind operation, const Expr *rValue)
                 : lValue_(lValue), operation_(operation), rValue_(rValue) {
         }
 
-        virtual ~BinaryExpression() {
-
-        }
+        virtual ~Binary() { }
 
         ExpressionKind expressionType() const {
             return ExpressionKind::Binary;
@@ -148,12 +98,12 @@ namespace llast {
             return rValue_->dataType();
         }
 
-        const Expression *lValue() const {
-            return lValue_;
+        const Expr *lValue() const {
+            return lValue_.get();
         }
 
-        const Expression *rValue() const {
-            return rValue_;
+        const Expr *rValue() const {
+            return rValue_.get();
         }
 
         OperationKind operation() const {
@@ -161,17 +111,29 @@ namespace llast {
         }
     };
 
-    /** Contains a series of expressions, such as a method body, or one of the if-then-else parts. */
-    class BlockExpression : public Expression {
-        const std::vector<Expression *> expressions_;
+    /** Defines a variable. */
+    class Variable {
+        const std::string name_;
+        const DataType dataType_;
+
     public:
-        BlockExpression(std::vector<Expression *> expressions) : expressions_(expressions) {
+        Variable(const std::string &name_, const DataType dataType) : name_(name_), dataType_(dataType) { }
 
-        }
+        std::string name() const { return name_;}
+        DataType dataType() const { return dataType_; }
+    };
 
-        virtual ~BlockExpression() {
+    /** Contains a series of expressions. */
+    class Block : public Expr {
+        const std::vector<std::unique_ptr<const Expr>> expressions_;
+        const std::vector<std::unique_ptr<const Variable>> variableDeclarations;
+    public:
 
-        }
+        /** Note:  assumes ownership of the contents of the vector arguments. */
+        Block(std::vector<std::unique_ptr<const Variable>> &variableDeclarations,
+              std::vector<std::unique_ptr<const Expr>> &expressions)
+                : variableDeclarations{std::move(variableDeclarations)},
+                  expressions_{std::move(expressions)} { }
 
         ExpressionKind expressionType() const {
             return ExpressionKind::Block;
@@ -182,29 +144,55 @@ namespace llast {
             return expressions_.back()->dataType();
         }
 
-        void forEach(std::function<void(Expression*)> func) const {
-            for(Expression *expr : expressions_)
-                func(expr);
+        void forEach(std::function<void(const Expr*)> func) const {
+            for(auto const &expr : expressions_) {
+                func(expr.get());
+            }
         }
     };
 
-    class ConditionalExpression : public Expression {
-        Expression *condition_;
-        Expression *truePart_;
-        Expression *falsePart_;
-
+    /** Helper class which makes creating Block expression instances much easier. */
+    class BlockBuilder {
+        std::vector<std::unique_ptr<const Expr>> expressions_;
+        std::vector<std::unique_ptr<const Variable>> variables_;
     public:
-        ConditionalExpression(Expression *condition, Expression *truePart, Expression *falsePart)
-                : condition_(condition), truePart_(truePart), falsePart_(falsePart) {
+        virtual ~BlockBuilder() {
+        }
 
-            ARG_NOT_NULL(condition);
+        BlockBuilder *addVariable(const Variable *varDecl) {
+            variables_.emplace_back(varDecl);
+            return this;
+        }
+
+        BlockBuilder *addExpression(const Expr *newExpr) {
+            expressions_.emplace_back(newExpr);
+            return this;
+        }
+
+        std::unique_ptr<Block const> build() {
+            return std::make_unique<Block>(variables_, expressions_);
+        }
+    };
+
+
+    /** Can be the basis of an if-then-else or ternary operator. */
+    class Conditional : public Expr {
+        std::unique_ptr<const Expr> condition_;
+        std::unique_ptr<const Expr> truePart_;
+        std::unique_ptr<const Expr> falsePart_;
+    public:
+
+        /** Note:  assumes ownership of condition, truePart and falsePart.  */
+        Conditional(const Expr * condition, const Expr * truePart, const Expr * falsePart)
+                : condition_(condition), truePart_(truePart), falsePart_(falsePart)
+        {
+            ARG_NOT_NULL(condition_);
         }
 
         ExpressionKind expressionType() const {
             return ExpressionKind::Conditional;
         }
 
-        /** The data type of a block expression is always the data type of the last expression in the block. */
         DataType dataType() const {
             if(truePart_ != nullptr) {
                 return truePart_->dataType();
@@ -217,17 +205,16 @@ namespace llast {
             }
         }
 
-        Expression *condition() {
-            return condition_;
+        const Expr *condition() const {
+            return condition_.get();
         }
 
-        Expression *truePart() {
-            return truePart_;
+        const Expr *truePart() const {
+            return truePart_.get();
         }
 
-        Expression *falsePart() {
-            return falsePart_;
+        const Expr *falsePart() const {
+            return falsePart_.get();
         }
     };
-
 }
