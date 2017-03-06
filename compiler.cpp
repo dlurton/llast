@@ -33,20 +33,22 @@
 namespace llast {
 
     class CodeGenVisitor : public ExpressionTreeVisitor {
+        const std::string moduleName_;
         llvm::LLVMContext context_;
         llvm::IRBuilder<> irBuilder_;
         std::unique_ptr<llvm::Module> module_;
         llvm::Function* function_;
         llvm::BasicBlock *block_;
 
-        std::unordered_map<std::string, llvm::AllocaInst*> namedValues_;
+        typedef std::unordered_map<std::string, llvm::AllocaInst*> AllocaScope;
 
-        std::deque<const Scope*> scopeStack_;
+        //this is a deque and not an actual std::stack because we need the ability to iterate over it's contents
+        std::deque<AllocaScope> allocaScopeStack_;
         std::stack<llvm::Value*> valueStack_;
         std::stack<const Expr*> ancestryStack_;
 
     public:
-        CodeGenVisitor() : irBuilder_(context_) { }
+        CodeGenVisitor(std::string moduleName) : moduleName_{moduleName}, irBuilder_(context_) { }
 
         virtual void initialize() {
 //
@@ -55,7 +57,7 @@ namespace llast {
 //            llvm::InitializeNativeTargetAsmParser();
 
 
-            module_ = llvm::make_unique<llvm::Module>("llast jit", context_);
+            module_ = llvm::make_unique<llvm::Module>(moduleName_, context_);
             //function_ = module_->getFunction("someFunc");
             std::vector<llvm::Type*> argTypes;
             llvm::FunctionType *ft = llvm::FunctionType::get(llvm::Type::getVoidTy(context_), argTypes, false);
@@ -68,7 +70,7 @@ namespace llast {
         }
 
         virtual void cleanUp() {
-            DEBUG_ASSERT(scopeStack_.size() == 0, "When compilation complete, no scopes should remain.");
+            //DEBUG_ASSERT(scopeStack_.size() == 0, "When compilation complete, no scopes should remain.");
             DEBUG_ASSERT(valueStack_.size() == 0, "When compilation complete, no values should remain.");
         }
 
@@ -95,40 +97,55 @@ namespace llast {
 //        virtual void visitedConditional(const Conditional *expr) {}
 //        virtual void visitingBinary(const Binary *expr) {}
 
-        virtual void visitingBlock(const Block *expr) {
-            scopeStack_.push_back(expr);
+        llvm::Value *lookupVariable(const std::string &name) {
+            for(auto scope = allocaScopeStack_.rbegin(); scope != allocaScopeStack_.rend(); ++scope) {
+                auto foundValue = scope->find(name);
+                if(foundValue != scope->end()) {
+                    return foundValue->second;
+                }
+            }
 
-            //TODO:  these should be scoped as well..
+            throw InvalidStateException(std::string("Variable '") + name + std::string("' was not defined."));
+        }
+
+        virtual void visitingBlock(const Block *expr) {
+            allocaScopeStack_.emplace_back();
+            AllocaScope &topScope = allocaScopeStack_.back();
+
             for(auto var : expr->variables()) {
-                if(namedValues_.find(var->name()) != namedValues_.end()) {
+                 if(topScope.find(var->name()) != topScope .end()) {
                     throw InvalidStateException("More than one variable named '" + var->name() +
                                                         "' was defined in the current scope.");
                 }
 
-                //TODO:  determine the actual type to use here.
-                auto type = llvm::Type::getInt32Ty(context_);
-                //llvm::AllocaInst *allocaInst = irBuilder_.CreateAlloca(type, getConstantInt32(0), var->name());
+                llvm::Type *type{getType(var->dataType())};
                 llvm::AllocaInst *allocaInst = irBuilder_.CreateAlloca(type, nullptr, var->name());
-                namedValues_[var->name()] = allocaInst;
+                topScope [var->name()] = allocaInst;
+            }
+        }
+
+        llvm::Type *getType(DataType type)
+        {
+            switch(type) {
+                case DataType::Bool:
+                    return llvm::Type::getInt8Ty(context_);
+                case DataType::Int32:
+                    return llvm::Type::getInt32Ty(context_);
+                case DataType::Float:
+                    return llvm::Type::getFloatTy(context_);
+                case DataType::Double:
+                    return llvm::Type::getDoubleTy(context_);
+                default:
+                    throw UnhandledSwitchCase();
             }
         }
 
         virtual void visitedBlock(const Block *expr) {
-            scopeStack_.pop_back();
+            allocaScopeStack_.pop_back();
         }
 
-//        const Variable *lookupVariable(std::string &name) {
-//            for(auto itr = scopeStack_.rbegin(); itr != scopeStack_.rend(); ++itr) {
-//                const Variable *var = (*itr)->findVariable(name);
-//                if(var)
-//                    return var;
-//            }
-//
-//            return nullptr;
-//        }
-
         virtual void visitedAssignVariable(const AssignVariable *expr) {
-            llvm::AllocaInst *inst = findAllocaInst(expr->name());
+            llvm::Value *inst = lookupVariable(expr->name());
 
             llvm::Value *value = valueStack_.top();
             valueStack_.pop();
@@ -169,18 +186,8 @@ namespace llast {
         }
 
         virtual void visitVariableRef(const VariableRef *expr) {
-            llvm::AllocaInst *allocaInst = findAllocaInst(expr->name());
+            llvm::Value *allocaInst = lookupVariable(expr->name());
             valueStack_.push(irBuilder_.CreateLoad(allocaInst));
-        }
-
-        llvm::AllocaInst *findAllocaInst(std::string name) const {
-            //TODO:  traverse scope
-            auto foundAllocaInst = namedValues_.find(name);
-            if(foundAllocaInst == namedValues_.end())
-                throw InvalidStateException(std::string("Ooops, variable named '") + name +
-                                            std::string("' was not added to the current scope"));
-
-            return foundAllocaInst->second;
         }
     }; // class CodeGenVisitor
 
@@ -188,7 +195,7 @@ namespace llast {
     void EmbryonicCompiler::compileEmbryonically(const Expr *expr) {
 
         //Generate LLVM IL
-        CodeGenVisitor visitor;
+        CodeGenVisitor visitor{"EmbryonicModule"};
         ExpressionTreeWalker walker(&visitor);
         walker.walkTree(expr);
 

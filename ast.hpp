@@ -39,7 +39,9 @@ namespace llast {
         Void,
         Bool,
         Int32,
-        Pointer
+        Pointer,
+        Float,
+        Double
     };
     std::string to_string(DataType dataType);
 

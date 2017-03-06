@@ -6,12 +6,16 @@
 #include "pretty.hpp"
 #include "compiler.hpp"
 
+//TODO:  http://llvm.org/docs/tutorial/LangImpl05.html#if-then-else
+
 //https://github.com/IronLanguages/dlr/tree/master/Src/Microsoft.Scripting.Core/Ast
 //http://www.stack.nl/~dimitri/doxygen/manual/docblocks.html
 
 using namespace llast;
 
 void constructSimpleAst() {
+
+
 
     auto var1 = new Variable("var1", DataType::Int32);
     auto var2 = new Variable("var2", DataType::Int32);
