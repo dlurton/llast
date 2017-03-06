@@ -11,7 +11,6 @@
 /** Rules for AST nodes:
  *      - Every node shall "own" its child nodes so that when a node is deleted, all of its children are also deleted.
  *      - Thou shalt not modify any AST node after it has been created.
- *      - More rules may come at another time.
  */
 
 namespace llast {
@@ -19,16 +18,16 @@ namespace llast {
     enum class ExpressionKind {
         Binary,
         Invoke,
-        VarRef,
+        VariableRef,
         Conditional,
         Switch,
         Block,
         LiteralInt32,
+        AssignVariable
     };
     std::string to_string(ExpressionKind expressionType);
 
     enum class OperationKind {
-        Assign,
         Add,
         Sub,
         Mul,
@@ -48,10 +47,9 @@ namespace llast {
     class Expr {
     public:
         virtual ~Expr() { }
-        virtual ExpressionKind expressionType() const = 0;
+        virtual ExpressionKind expressionKind() const = 0;
 
         virtual DataType dataType() const { return DataType::Void; }
-
     };
 
     /** Represents an expression that is a literal 32 bit integer. */
@@ -62,7 +60,7 @@ namespace llast {
 
         virtual ~LiteralInt32() { }
 
-        ExpressionKind expressionType() const {
+        ExpressionKind expressionKind() const {
             return ExpressionKind::LiteralInt32;
         }
 
@@ -89,7 +87,7 @@ namespace llast {
 
         virtual ~Binary() { }
 
-        ExpressionKind expressionType() const {
+        ExpressionKind expressionKind() const {
             return ExpressionKind::Binary;
         }
 
@@ -111,7 +109,7 @@ namespace llast {
         }
     };
 
-    /** Defines a variable. */
+    /** Defines a variable or a variable reference. */
     class Variable {
         const std::string name_;
         const DataType dataType_;
@@ -119,23 +117,85 @@ namespace llast {
     public:
         Variable(const std::string &name_, const DataType dataType) : name_(name_), dataType_(dataType) { }
 
-        std::string name() const { return name_;}
         DataType dataType() const { return dataType_; }
+
+        std::string name() const { return name_;}
+
+        std::string toString() const {
+            return name_ + ":" + to_string(dataType_);
+        }
+
+    };
+
+    class VariableRef : public Expr {
+        const Variable *variable_;
+    public:
+        VariableRef(const Variable * variable) : variable_{variable} {
+
+        }
+
+        ExpressionKind expressionKind() const { return ExpressionKind::VariableRef; }
+
+        DataType dataType() const { return variable_->dataType(); }
+
+        std::string name() const { return variable_->name(); }
+
+        std::string toString() const {
+            return variable_->name() + ":" + to_string(variable_->dataType());
+        }
+    };
+
+    class AssignVariable : public Expr {
+        const Variable *variable_;  //Note:  variables are owned by llast::Scope.
+        const std::unique_ptr<const Expr> valueExpr_;
+    public:
+        AssignVariable(const Variable *variable_, const Expr *valueExpr)
+                : variable_(variable_), valueExpr_(valueExpr) { }
+
+        ExpressionKind expressionKind() const { return ExpressionKind::AssignVariable; }
+        DataType dataType() const { return variable_->dataType(); }
+
+        std::string name() const { return variable_->name(); }
+        const Expr* valueExpr() const { return valueExpr_.get(); }
+    };
+
+    class Scope {
+        const std::unordered_map<std::string, std::unique_ptr<const Variable>> variables_;
+    public:
+        Scope(std::unordered_map<std::string, std::unique_ptr<const Variable>> variables)
+                : variables_(std::move(variables)) { }
+
+        const Variable *findVariable(std::string &name) const {
+            auto found = variables_.find(name);
+            if(found == variables_.end()) {
+                return nullptr;
+            }
+            return (*found).second.get();
+        }
+
+        std::vector<const Variable*> variables() const {
+            std::vector<const Variable*> vars;
+
+            for(auto &v : variables_) {
+                vars.push_back(v.second.get());
+            }
+
+            return vars;
+        }
     };
 
     /** Contains a series of expressions. */
-    class Block : public Expr {
+    class Block : public Expr, public Scope {
         const std::vector<std::unique_ptr<const Expr>> expressions_;
-        const std::vector<std::unique_ptr<const Variable>> variableDeclarations;
     public:
 
         /** Note:  assumes ownership of the contents of the vector arguments. */
-        Block(std::vector<std::unique_ptr<const Variable>> &variableDeclarations,
+        Block(std::unordered_map<std::string, std::unique_ptr<const Variable>> &variables,
               std::vector<std::unique_ptr<const Expr>> &expressions)
-                : variableDeclarations{std::move(variableDeclarations)},
+                : Scope(std::move(variables)),
                   expressions_{std::move(expressions)} { }
 
-        ExpressionKind expressionType() const {
+        ExpressionKind expressionKind() const {
             return ExpressionKind::Block;
         }
 
@@ -154,13 +214,13 @@ namespace llast {
     /** Helper class which makes creating Block expression instances much easier. */
     class BlockBuilder {
         std::vector<std::unique_ptr<const Expr>> expressions_;
-        std::vector<std::unique_ptr<const Variable>> variables_;
+        std::unordered_map<std::string, std::unique_ptr<const Variable>> variables_;
     public:
         virtual ~BlockBuilder() {
         }
 
         BlockBuilder *addVariable(const Variable *varDecl) {
-            variables_.emplace_back(varDecl);
+            variables_.emplace(varDecl->name(), varDecl);
             return this;
         }
 
@@ -189,7 +249,7 @@ namespace llast {
             ARG_NOT_NULL(condition_);
         }
 
-        ExpressionKind expressionType() const {
+        ExpressionKind expressionKind() const {
             return ExpressionKind::Conditional;
         }
 

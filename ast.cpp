@@ -9,8 +9,10 @@ namespace llast {
                 return "Binary";
             case ExpressionKind::Invoke:
                 return "Invoke";
-            case ExpressionKind::VarRef:
-                return "VarRef";
+            case ExpressionKind::VariableRef:
+                return "Variable";
+            case ExpressionKind::AssignVariable:
+                return "AssignVariable";
             case ExpressionKind::Conditional:
                 return "Conditional";
             case ExpressionKind::Switch:
@@ -27,8 +29,6 @@ namespace llast {
 
     std::string to_string(OperationKind type) {
         switch (type) {
-            case OperationKind::Assign:
-                return "Assign";
             case OperationKind::Add:
                 return "Add";
             case OperationKind::Sub:
@@ -56,4 +56,6 @@ namespace llast {
                 throw UnhandledSwitchCase();
         }
     }
+
+
 }

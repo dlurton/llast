@@ -1,9 +1,10 @@
 
 #pragma once
 
-#include <iostream>
-
 #include "visitor.hpp"
+
+#include <iostream>
+#include <algorithm>
 
 namespace llast {
 
@@ -39,6 +40,28 @@ namespace llast {
 
         void visitingBlock(const Block *expr) {
             out_ << "Block:";
+            writeScopeVariables(expr);
+        }
+
+        void writeScopeVariables(const Scope *scope) {
+            out_ << "(";
+            std::vector<const Variable*> variables = scope->variables();
+            if(variables.size() == 0) {
+                out_ << ")";
+            } else if(variables.size() == 1) {
+                out_ << variables.front()->toString() << ")";
+            } else {
+                std::sort(variables.begin(), variables.end(),
+                          [](const Variable* a, const Variable *b) {
+                              return a->name() < b->name();
+                          });
+
+                for(auto itr = variables.begin(); itr != variables.end() - 1; ++itr) {
+                    out_ << (*itr)->toString() << ", ";
+                }
+
+                out_ << variables.back()->toString() << ")";
+            }
         }
 
         void visitedBlock(const Block *expr) {
@@ -55,8 +78,20 @@ namespace llast {
             out_ << "LiteralInt32: " << std::to_string(expr->value());
         }
 
+        void visitVariableRef(const Variable *expr) {
+            out_ << "Variable: " << expr->name();
+        }
+
         void visitingConditional(const Conditional *expr) {
             out_ << "Conditional:";
+        }
+
+        virtual void visitingAssignVariable(const AssignVariable *expr) {
+            out_ << "AssignVariable: " << expr->name();
+        }
+
+        virtual void visitedAssignVariable(const AssignVariable *expr) {
+
         }
     };
 }

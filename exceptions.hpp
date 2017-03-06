@@ -3,6 +3,19 @@
 #include <string>
 #include <iostream>
 
+#define ARG_NOT_NULL(arg) if((arg) == nullptr) throw llast::InvalidArgumentException("##arg");
+
+#ifdef LLAST_DEBUG
+#define DEBUG_ASSERT(arg, reason) if(!(arg)) { throw llast::DebugAssertionFailedException( \
+    std::string("Debug assertion failed!") + \
+    std::string("\nFile       : ") + std::string(__FILE__) + \
+    std::string("\nLine       : ") + std::to_string(__LINE__) + \
+    std::string("\nExpression : ") + std::string(#arg) + \
+    std::string("\nReason     : ") + std::string(reason)); }
+#else
+#define DEBUG_ASSERT(arg) //no op
+#endif
+
 namespace llast {
 
     class Exception {
@@ -30,6 +43,15 @@ namespace llast {
         }
     };
 
+#ifdef LLAST_DEBUG
+    class DebugAssertionFailedException : public FatalException {
+    public:
+        DebugAssertionFailedException(const std::string &message) : FatalException(message) {
+
+        }
+    };
+#endif
+
     class InvalidArgumentException : public Exception {
     public:
         InvalidArgumentException(const std::string &argumentName)
@@ -37,8 +59,6 @@ namespace llast {
 
         }
     };
-
-#define ARG_NOT_NULL(arg) if((arg) == nullptr) throw InvalidArgumentException("##arg");
 
     class UnhandledSwitchCase : public FatalException {
     public:
@@ -60,4 +80,12 @@ namespace llast {
         }
 
     };
+
+    class CompileException : public Exception {
+    public:
+        CompileException(const std::string &message) : Exception(message) {
+
+        }
+    };
+
 }

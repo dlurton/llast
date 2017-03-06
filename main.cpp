@@ -4,6 +4,7 @@
 
 #include "visitor.hpp"
 #include "pretty.hpp"
+#include "compiler.hpp"
 
 //https://github.com/IronLanguages/dlr/tree/master/Src/Microsoft.Scripting.Core/Ast
 //http://www.stack.nl/~dimitri/doxygen/manual/docblocks.html
@@ -12,27 +13,24 @@ using namespace llast;
 
 void constructSimpleAst() {
 
-    //10 + 11
-    Expr *expr1 = new Binary(new LiteralInt32(10), OperationKind::Add, new LiteralInt32(11));
+    auto var1 = new Variable("var1", DataType::Int32);
+    auto var2 = new Variable("var2", DataType::Int32);
 
-    //20 - 21
-    Expr *expr2 = new Binary(new LiteralInt32(20), OperationKind::Sub, new LiteralInt32(21));
-
-    //1 ? 30 : 31
-    Expr *expr3 = new Conditional(new LiteralInt32(1), new LiteralInt32(30), new LiteralInt32(31));
-
-    // { all of the above }
     BlockBuilder bb;
-    std::unique_ptr<Block const> blockExpr =
-            bb.addExpression(expr1)
-            ->addExpression(expr2)
-            ->addExpression(expr3)
-            ->build();
+    std::unique_ptr<Block const> blockExpr{
+            bb.addVariable(var1)
+            ->addVariable(var2)
+            ->addExpression(new AssignVariable(var1, new LiteralInt32(12)))
+            ->addExpression(new AssignVariable(var2, new Binary(new VariableRef(var1), OperationKind::Mul, new LiteralInt32(6))))
+            ->build()
+    };
 
     // Pretty print the AST
     PrettyPrinterVisitor visitor(std::cout);
     ExpressionTreeWalker walker(&visitor);
     walker.walkTree(blockExpr.get());
+
+    EmbryonicCompiler::compileEmbryonically(blockExpr.get());
 }
 
 int main() {

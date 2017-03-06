@@ -36,6 +36,11 @@ namespace llast {
 
         virtual void visitLiteralInt32(const LiteralInt32 *expr) {}
 
+        virtual void visitVariableRef(const VariableRef *expr) {}
+
+        virtual void visitingAssignVariable(const AssignVariable *expr) {}
+
+        virtual void visitedAssignVariable(const AssignVariable *expr) {}
     };
 
     /** Default tree walker, suitable for most purposes */
@@ -63,7 +68,7 @@ namespace llast {
 
         virtual void walk(const Expr *expr) const {
             ARG_NOT_NULL(expr);
-            switch (expr->expressionType()) {
+            switch (expr->expressionKind()) {
                 case ExpressionKind::LiteralInt32:
                     walkLiteralInt32((LiteralInt32 *) expr);
                     break;
@@ -75,6 +80,12 @@ namespace llast {
                     break;
                 case ExpressionKind::Conditional:
                     walkConditional((Conditional *) expr);
+                    break;
+                case ExpressionKind::VariableRef:
+                    walkVariableRef((VariableRef*)expr);
+                    break;
+                case ExpressionKind::AssignVariable:
+                    walkAssignVariable((AssignVariable*)expr);
                     break;
                 default:
                     throw UnhandledSwitchCase();
@@ -90,6 +101,25 @@ namespace llast {
 
             visitor_->visitedBlock(blockExpr);
             visitor_->visitedNode(blockExpr);
+        }
+
+        void walkVariableRef(const VariableRef *variableRefExpr) const {
+            ARG_NOT_NULL(variableRefExpr);
+            visitor_->visitingNode(variableRefExpr);
+            visitor_->visitVariableRef(variableRefExpr);
+            visitor_->visitedNode(variableRefExpr);
+        }
+
+        void walkAssignVariable(const AssignVariable *assignVariableExpr) const {
+
+            ARG_NOT_NULL(assignVariableExpr);
+            visitor_->visitingNode(assignVariableExpr);
+            visitor_->visitingAssignVariable(assignVariableExpr);
+
+            walk(assignVariableExpr->valueExpr());
+
+            visitor_->visitedAssignVariable(assignVariableExpr);
+            visitor_->visitedNode(assignVariableExpr);
         }
 
         void walkBinary(const Binary *binaryExpr) const {
@@ -110,16 +140,17 @@ namespace llast {
             visitor_->visitingConditional(conditionalExpr);
 
             walk(conditionalExpr->condition());
-            if (conditionalExpr->truePart())
+            if (conditionalExpr->truePart()) {
                 walk(conditionalExpr->truePart());
+            }
 
-            if (conditionalExpr->falsePart())
+            if (conditionalExpr->falsePart()) {
                 walk(conditionalExpr->falsePart());
+            }
 
             visitor_->visitedConditional(conditionalExpr);
             visitor_->visitedNode(conditionalExpr);
         }
-
 
         void walkLiteralInt32(const LiteralInt32 *expr) const {
             ARG_NOT_NULL(expr);
