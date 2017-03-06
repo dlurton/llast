@@ -78,8 +78,8 @@ namespace llast {
             out_ << "LiteralInt32: " << std::to_string(expr->value());
         }
 
-        void visitVariableRef(const Variable *expr) {
-            out_ << "Variable: " << expr->name();
+        void visitVariableRef(const VariableRef *expr) {
+            out_ << "VariableRef: " << expr->name();
         }
 
         void visitingConditional(const Conditional *expr) {
