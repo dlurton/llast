@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "visitor.hpp"
+#include "ExpressionTreeVisitor.hpp"
 
 #include <iostream>
 #include <algorithm>
@@ -83,14 +83,14 @@ namespace llast {
         }
 
         void visitingConditional(const Conditional *expr) {
-            out_ << "Conditional:";
+            out_ << "Conditional: ";
         }
 
         virtual void visitingAssignVariable(const AssignVariable *expr) {
             out_ << "AssignVariable: " << expr->name();
         }
-
-        virtual void visitedAssignVariable(const AssignVariable *expr) {
+        virtual void visitingReturn(const Return *expr) {
+            out_ << "Return: ";
 
         }
     };

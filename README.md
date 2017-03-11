@@ -62,7 +62,7 @@ To get llvm installed on your linux box, execute the following commands:
     cd llvm-3.9.1.src/
     mkdir build
     cd build
-    cmake ..
+    cmake .. -DLLVM_BUILD_LLVM_DYLIB=ON
     cmake --build .  -- -j <num cpu cores>
 
 Go make yourself some coffee, etc, blah blah.  Then, continue with:
@@ -70,3 +70,7 @@ Go make yourself some coffee, etc, blah blah.  Then, continue with:
     cmake --build . --target install
 
 Also see: http://llvm.org/docs/CMake.html
+
+TODO:
+
+ - Attempting to return a return causes SIGSEV.  This should either be an error or succeed.

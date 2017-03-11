@@ -13,16 +13,15 @@
     std::string("\nExpression : ") + std::string(#arg) + \
     std::string("\nReason     : ") + std::string(reason)); }
 #else
-#define DEBUG_ASSERT(arg) //no op
+#define DEBUG_ASSERT(arg, reason) //no op
 #endif
 
 namespace llast {
 
-    class Exception {
-        std::string message_;
-
+    class Exception : public std::runtime_error {
     public:
-        Exception(std::string message) : message_(message) {
+        Exception(const std::string &message) : runtime_error(message) {
+
             //TODO: store traceback/stacktrace/whatever.
             // http://stackoverflow.com/questions/3151779/how-its-better-to-invoke-gdb-from-program-to-print-its-stacktrace/4611112#4611112
         }
@@ -30,7 +29,7 @@ namespace llast {
         virtual ~Exception() { }
 
         void dump() {
-            std::cout << message_ << "\n";
+            std::cout << what() << "\n";
         }
     };
 
@@ -81,11 +80,21 @@ namespace llast {
 
     };
 
+    enum class CompileError {
+        NoError,
+        BinaryExprDataTypeMismatch
+    };
+
     class CompileException : public Exception {
+        const CompileError error_;
     public:
-        CompileException(const std::string &message) : Exception(message) {
+
+        CompileException(CompileError error, const std::string &message)
+                : Exception(message), error_{error} {
 
         }
+
+        CompileError error() { return error_; }
     };
 
 }

@@ -1,8 +1,15 @@
+// https://github.com/llvm-mirror/llvm/tree/master/examples
 
-#include "compiler.hpp"
-#include "visitor.hpp"
+
+#include "EmbryonicCompiler.hpp"
+#include "ExpressionTreeVisitor.hpp"
 
 #include <stack>
+#include <algorithm>
+#include <memory>
+
+
+#include <llvm/Support/DynamicLibrary.h>
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -12,22 +19,19 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 
-//#include "llvm/IR/DerivedTypes.h"
-//#include "llvm/IR/LLVMContext.h"
-//#include "llvm/IR/Type.h"
-//#include "llvm/ADT/APFloat.h"
-//#include "llvm/ADT/STLExtras.h"
-//#include "llvm/IR/BasicBlock.h"
-//#include "llvm/IR/Constants.h"
-//#include "llvm/IR/DerivedTypes.h"
-//#include "llvm/IR/Function.h"
-//#include "llvm/IR/IRBuilder.h"
-//#include "llvm/IR/LLVMContext.h"
-//#include "llvm/IR/Module.h"
-//#include "llvm/IR/Type.h"
-//#include "llvm/IR/Verifier.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+#include "llvm/ExecutionEngine/Orc/JITSymbol.h"
+#include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
+#include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
+#include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
+#include "llvm/IR/Mangler.h"
 
+#include "llvm/ExecutionEngine/GenericValue.h"
 #include "llvm/Support/TargetSelect.h"
+#include "ExpressionTreeWalker.hpp"
 
 
 namespace llast {
@@ -51,18 +55,10 @@ namespace llast {
         CodeGenVisitor(std::string moduleName) : moduleName_{moduleName}, irBuilder_(context_) { }
 
         virtual void initialize() {
-//
-//            llvm::InitializeNativeTarget();
-//            llvm::InitializeNativeTargetAsmPrinter();
-//            llvm::InitializeNativeTargetAsmParser();
-
-
             module_ = llvm::make_unique<llvm::Module>(moduleName_, context_);
-            //function_ = module_->getFunction("someFunc");
             std::vector<llvm::Type*> argTypes;
-            llvm::FunctionType *ft = llvm::FunctionType::get(llvm::Type::getVoidTy(context_), argTypes, false);
-            function_ = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "someFunc",
-                                                          module_.get());
+            llvm::FunctionType *ft = llvm::FunctionType::get(llvm::Type::getInt32Ty(context_), argTypes, false);
+            function_ = llvm::cast<llvm::Function>(module_->getOrInsertFunction("someFunc", ft));
 
             block_ = llvm::BasicBlock::Create(context_, "someEntry", function_);
 
@@ -78,6 +74,31 @@ namespace llast {
             std::cout << "LLVM IL:\n";
             module_->print(llvm::outs(), nullptr);
         }
+    private:
+        llvm::GenericValue executeGenericValue() {
+            llvm::ExecutionEngine *EE =  llvm::EngineBuilder(std::move(module_)).create();
+
+            std::vector<llvm::GenericValue> noargs;
+            llvm::GenericValue gv = EE->runFunction(function_, noargs);
+
+            delete EE;
+
+            return gv;
+        }
+
+
+    public:
+
+        float executeFloat() {
+            auto gv = executeGenericValue();
+            return gv.FloatVal;
+        }
+
+        int executeInt32() {
+            auto gv = executeGenericValue();
+            uint64_t retval = *gv.IntVal.getRawData();
+            return retval;
+        }
 
         virtual void visitingNode(const Expr *expr) {
             ancestryStack_.push(expr);
@@ -89,13 +110,15 @@ namespace llast {
 
             //If the parent node of expr is a BlockExpr, the value left behind on valueStack_ is extraneous and
             //should be removed.  (This is a consequence of "everything is an expression.")
-            if(ancestryStack_.size() >= 1 && ancestryStack_.top()->expressionKind() == ExpressionKind::Block)
+            if(ancestryStack_.size() >= 1
+               && ancestryStack_.top()->expressionKind() == ExpressionKind::Block
+               &&  valueStack_.size() > 0) {
                 valueStack_.pop();
+            }
         }
 
 //        virtual void visitingConditional(const Conditional *expr) {}
 //        virtual void visitedConditional(const Conditional *expr) {}
-//        virtual void visitingBinary(const Binary *expr) {}
 
         llvm::Value *lookupVariable(const std::string &name) {
             for(auto scope = allocaScopeStack_.rbegin(); scope != allocaScopeStack_.rend(); ++scope) {
@@ -156,22 +179,41 @@ namespace llast {
 
         virtual void visitedBinary(const Binary *expr) {
 
+            if(expr->lValue()->dataType() != expr->rValue()->dataType()) {
+                throw CompileException(CompileError::BinaryExprDataTypeMismatch,
+                                       "Data types of lvalue and rvalue in binary expression do not match");
+            }
+
             llvm::Value *rValue = valueStack_.top();
             valueStack_.pop();
 
             llvm::Value *lValue = valueStack_.top();
             valueStack_.pop();
 
-            llvm::Value *result = createOperation(lValue, expr->operation(), rValue);
+            llvm::Value *result = createOperation(lValue, rValue, expr->operation(), expr->dataType());
             valueStack_.push(result);
         }
 
-        llvm::Value *createOperation(llvm::Value *lValue, OperationKind op, llvm::Value *rValue) {
-            switch(op) {
-                case OperationKind::Add: return irBuilder_.CreateAdd(lValue, rValue);
-                case OperationKind::Sub: return irBuilder_.CreateSub(lValue, rValue);
-                case OperationKind::Mul: return irBuilder_.CreateMul(lValue, rValue);
-                case OperationKind::Div: return irBuilder_.CreateSDiv(lValue, rValue);
+        llvm::Value *createOperation(llvm::Value *lValue, llvm::Value *rValue, OperationKind op, DataType dataType) {
+            switch(dataType) {
+                case DataType::Int32:
+                    switch(op) {
+                        case OperationKind::Add: return irBuilder_.CreateAdd(lValue, rValue);
+                        case OperationKind::Sub: return irBuilder_.CreateSub(lValue, rValue);
+                        case OperationKind::Mul: return irBuilder_.CreateMul(lValue, rValue);
+                        case OperationKind::Div: return irBuilder_.CreateSDiv(lValue, rValue);
+                        default:
+                            throw UnhandledSwitchCase();
+                    }
+                case DataType::Float:
+                    switch(op) {
+                        case OperationKind::Add: return irBuilder_.CreateFAdd(lValue, rValue);
+                        case OperationKind::Sub: return irBuilder_.CreateFSub(lValue, rValue);
+                        case OperationKind::Mul: return irBuilder_.CreateFMul(lValue, rValue);
+                        case OperationKind::Div: return irBuilder_.CreateFDiv(lValue, rValue);
+                        default:
+                            throw UnhandledSwitchCase();
+                    }
                 default:
                     throw UnhandledSwitchCase();
             }
@@ -181,26 +223,66 @@ namespace llast {
             valueStack_.push(getConstantInt32(expr->value()));
         }
 
-        llvm::ConstantInt *getConstantInt32(int value) {
+        virtual void visitLiteralFloat(const LiteralFloat *expr) {
+            valueStack_.push(getConstantFloat(expr->value()));
+        }
+
+        llvm::Value *getConstantInt32(int value) {
             return llvm::ConstantInt::get(context_, llvm::APInt(32, value, true));
+        }
+
+        llvm::Value *getConstantFloat(float value) {
+            return llvm::ConstantFP::get(context_, llvm::APFloat(value));
         }
 
         virtual void visitVariableRef(const VariableRef *expr) {
             llvm::Value *allocaInst = lookupVariable(expr->name());
             valueStack_.push(irBuilder_.CreateLoad(allocaInst));
         }
+
+        void visitedReturn(const Return *expr) {
+            DEBUG_ASSERT(valueStack_.size() > 0, "")
+            llvm::Value* retValue = valueStack_.top();
+            valueStack_.pop();
+            irBuilder_.CreateRet(retValue);
+        }
+
     }; // class CodeGenVisitor
 
-    /** This method just demonstrates the process of compilation, for now */
-    void EmbryonicCompiler::compileEmbryonically(const Expr *expr) {
 
-        //Generate LLVM IL
-        CodeGenVisitor visitor{"EmbryonicModule"};
-        ExpressionTreeWalker walker(&visitor);
-        walker.walkTree(expr);
+    //TODO:  convert this to class
+    //TODO:  DRY
+    namespace EmbryonicCompiler {
 
-        //Display the LLVM IL code to the console.
-        visitor.dumpIL();
-    }
+        void compile(const Expr* expr) {
+            //Generate LLVM IL
+            llast::CodeGenVisitor visitor{"EmbryonicModule"};
+            ExpressionTreeWalker walker{&visitor};
+            walker.walkTree(expr);
+        }
 
-}
+        float compileAndExecuteFloatExpr(const Expr *expr) {
+
+            //Generate LLVM IL
+            llast::CodeGenVisitor visitor{"EmbryonicModule"};
+            ExpressionTreeWalker walker{&visitor};
+            walker.walkTree(expr);
+
+            //Display the LLVM IL code to the console.
+            //visitor.dumpIL();
+            return visitor.executeFloat();
+        }
+        /** This method just demonstrates the process of compilation, for now */
+        int compileAndExecuteInt32Expr(const Expr *expr) {
+
+            //Generate LLVM IL
+            llast::CodeGenVisitor visitor{"EmbryonicModule"};
+            ExpressionTreeWalker walker{&visitor};
+            walker.walkTree(expr);
+
+            //Display the LLVM IL code to the console.
+            //visitor.dumpIL();
+            return visitor.executeInt32();
+        }
+    } //namespace EmbryonicCompiler
+} //namespace float
