@@ -13,7 +13,7 @@
     std::string("\nExpression : ") + std::string(#arg) + \
     std::string("\nReason     : ") + std::string(reason)); }
 #else
-#define DEBUG_ASSERT(arg) //no op
+#define DEBUG_ASSERT(arg, reason) //no op
 #endif
 
 namespace llast {

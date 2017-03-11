@@ -2,13 +2,14 @@
 
 #pragma once
 
-#include "ast.hpp"
+#include "Expr.hpp"
 
 #include <functional>
 
 namespace llast {
 
     namespace EmbryonicCompiler {
-        void compileEmbryonically(const Expr *expr);
+        int compileAndExecute(const Expr *expr);
     };
+
 }

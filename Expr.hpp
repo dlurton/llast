@@ -6,7 +6,7 @@
 #include <functional>
 #include <bits/unique_ptr.h>
 
-#include "exceptions.hpp"
+#include "Exception.hpp"
 
 /** Rules for AST nodes:
  *      - Every node shall "own" its child nodes so that when a node is deleted, all of its children are also deleted.
@@ -23,7 +23,8 @@ namespace llast {
         Switch,
         Block,
         LiteralInt32,
-        AssignVariable
+        AssignVariable,
+        Return
     };
     std::string to_string(ExpressionKind expressionType);
 
@@ -151,8 +152,8 @@ namespace llast {
         const Variable *variable_;  //Note:  variables are owned by llast::Scope.
         const std::unique_ptr<const Expr> valueExpr_;
     public:
-        AssignVariable(const Variable *variable_, const Expr *valueExpr)
-                : variable_(variable_), valueExpr_(valueExpr) { }
+        AssignVariable(const Variable *variable, const Expr *valueExpr)
+                : variable_(variable), valueExpr_(valueExpr) { }
 
         ExpressionKind expressionKind() const { return ExpressionKind::AssignVariable; }
         DataType dataType() const { return variable_->dataType(); }
@@ -161,11 +162,25 @@ namespace llast {
         const Expr* valueExpr() const { return valueExpr_.get(); }
     };
 
+    class Return : public Expr {
+        const std::unique_ptr<const Expr> valueExpr_;
+    public:
+        Return(const Expr *valueExpr)
+                : valueExpr_(valueExpr) { }
+
+        ExpressionKind expressionKind() const { return ExpressionKind::Return; }
+        DataType dataType() const { return valueExpr_->dataType(); }
+
+        const Expr* valueExpr() const { return valueExpr_.get(); }
+    };
+
     class Scope {
         const std::unordered_map<std::string, std::unique_ptr<const Variable>> variables_;
     public:
         Scope(std::unordered_map<std::string, std::unique_ptr<const Variable>> variables)
                 : variables_(std::move(variables)) { }
+
+        virtual ~Scope() {}
 
         const Variable *findVariable(std::string &name) const {
             auto found = variables_.find(name);
@@ -190,6 +205,7 @@ namespace llast {
     class Block : public Expr, public Scope {
         const std::vector<std::unique_ptr<const Expr>> expressions_;
     public:
+        virtual ~Block() {}
 
         /** Note:  assumes ownership of the contents of the vector arguments. */
         Block(std::unordered_map<std::string, std::unique_ptr<const Variable>> &variables,
@@ -231,8 +247,8 @@ namespace llast {
             return this;
         }
 
-        std::unique_ptr<Block const> build() {
-            return std::make_unique<Block>(variables_, expressions_);
+        Block *build() {
+            return new Block(variables_, expressions_);
         }
     };
 

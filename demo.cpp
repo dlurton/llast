@@ -2,9 +2,10 @@
 #include <vector>
 #include <memory>
 
-#include "visitor.hpp"
-#include "pretty.hpp"
-#include "compiler.hpp"
+#include "ExpressionTreeVisitor.hpp"
+#include "PrettyPrinter.hpp"
+#include "EmbryonicCompiler.hpp"
+#include "ExpressionTreeWalker.hpp"
 
 //TODO:  http://llvm.org/docs/tutorial/LangImpl05.html#if-then-else
 
@@ -27,6 +28,7 @@ void constructSimpleAst() {
             ->addExpression(new AssignVariable(var1, new LiteralInt32(12)))
             //var2 = var1 * 6;
             ->addExpression(new AssignVariable(var2, new Binary(new VariableRef(var1), OperationKind::Mul, new LiteralInt32(6))))
+                    ->addExpression(new Return(new VariableRef(var2)))
             ->build()
     };
 
@@ -35,7 +37,7 @@ void constructSimpleAst() {
     ExpressionTreeWalker walker(&visitor);
     walker.walkTree(blockExpr.get());
 
-    EmbryonicCompiler::compileEmbryonically(blockExpr.get());
+    EmbryonicCompiler::compileAndExecute(blockExpr.get());
 }
 
 int main() {
