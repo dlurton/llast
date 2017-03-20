@@ -24,23 +24,23 @@ namespace llast {
         PrettyPrinterVisitor(std::ostream &out) : out_(out) { }
         ~PrettyPrinterVisitor() { }
 
-        void cleanUp() {
+        void cleanUp() override {
             out_ << "\n";
         }
 
-        void visitingNode(const Expr *expr) {
+        void visitingNode(const Node *node) override {
             indent_++;
             out_ << "\n";
             writeTabs();
         }
 
-        void visitedNode(const Expr *expr) {
+        void visitedNode(const Node *node) override {
             indent_--;
         }
 
-        void visitingBlock(const Block *expr) {
+        void visitingBlock(const Block *expr) override {
             out_ << "Block:";
-            writeScopeVariables(expr);
+            writeScopeVariables(expr->scope());
         }
 
         void writeScopeVariables(const Scope *scope) {
@@ -64,34 +64,49 @@ namespace llast {
             }
         }
 
-        void visitedBlock(const Block *expr) {
+        void visitedBlock(const Block *expr) override {
 //            out_ << "\n";
 //            writeTabs(-1);
 //            out_ << "}";
         }
 
-        void visitingBinary(const Binary *expr) {
+        void visitingBinary(const Binary *expr) override {
             out_ << "Binary: " << to_string(expr->operation());
         }
 
-        void visitLiteralInt32(const LiteralInt32 *expr) {
+        void visitLiteralInt32(const LiteralInt32 *expr) override {
             out_ << "LiteralInt32: " << std::to_string(expr->value());
         }
+        void visitLiteralFloat(const LiteralFloat *expr) override {
+            out_ << "LiteralFloat: " << std::to_string(expr->value());
+        }
 
-        void visitVariableRef(const VariableRef *expr) {
+        void visitVariableRef(const VariableRef *expr) override {
             out_ << "VariableRef: " << expr->name();
         }
 
-        void visitingConditional(const Conditional *expr) {
+        void visitingConditional(const Conditional *expr) override {
             out_ << "Conditional: ";
         }
 
-        virtual void visitingAssignVariable(const AssignVariable *expr) {
+        virtual void visitingAssignVariable(const AssignVariable *expr) override {
             out_ << "AssignVariable: " << expr->name();
         }
-        virtual void visitingReturn(const Return *expr) {
-            out_ << "Return: ";
 
+        virtual void visitingReturn(const Return *expr) override {
+            out_ << "Return: ";
         }
+
+        virtual void visitingFunction(const Function *func) override {
+            out_ << "Function: " << func->name();
+        }
+
+        //virtual void visitedFunction(const Function *func) override {}
+
+        virtual void visitingModule(const Module *module) override {
+            out_ << "Module: " << module->name();
+        }
+
+        //virtual void visitedModule(const Module *module) override {}
     };
 }

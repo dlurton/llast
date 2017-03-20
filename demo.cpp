@@ -4,7 +4,7 @@
 
 #include "ExpressionTreeVisitor.hpp"
 #include "PrettyPrinter.hpp"
-#include "EmbryonicCompiler.hpp"
+#include "ExprRunner.hpp"
 #include "ExpressionTreeWalker.hpp"
 
 //TODO:  http://llvm.org/docs/tutorial/LangImpl05.html#if-then-else
@@ -35,9 +35,9 @@ void constructSimpleAst() {
     // Pretty print the AST
     PrettyPrinterVisitor visitor(std::cout);
     ExpressionTreeWalker walker(&visitor);
-    walker.walkTree(blockExpr.get());
+    walker.walkModule(blockExpr.get());
 
-    EmbryonicCompiler::compileAndExecuteInt32Expr(blockExpr.get());
+    ExprRunner::runInt32Expr(blockExpr.get());
 }
 
 int main() {

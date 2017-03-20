@@ -27,10 +27,10 @@ This code snippet:
     // Pretty print the AST
     PrettyPrinterVisitor visitor(std::cout);
     ExpressionTreeWalker walker(&visitor);
-    walker.walkTree(blockExpr.get());
+    walker.walkModule(blockExpr.get());
 
     //Generate LLVM IL and dump to stdout
-    EmbryonicCompiler::compileEmbryonically(blockExpr.get());
+    ExprRunner::compileEmbryonically(blockExpr.get());
 
 Example output:
      
@@ -57,9 +57,9 @@ Example output:
 
 To get llvm installed on your linux box, execute the following commands:
 
-    wget http://releases.llvm.org/3.9.1/llvm-3.9.1.src.tar.xz
-    tar xvf llvm-3.9.1.src.tar.xz
-    cd llvm-3.9.1.src/
+    wget http://releases.llvm.org/4.0.0/llvm-4.0.0.src.tar.xz
+    tar xvf llvm-4.0.0.src.tar.xz
+    cd llvm-4.0.0.src/
     mkdir build
     cd build
     cmake .. -DLLVM_BUILD_LLVM_DYLIB=ON
@@ -71,6 +71,12 @@ Go make yourself some coffee, etc, blah blah.  Then, continue with:
 
 Also see: http://llvm.org/docs/CMake.html
 
-TODO:
+#### TO DO:
 
  - Attempting to return a return causes SIGSEV.  This should either be an error or succeed.
+ 
+ #### Facts and other notes that should one day be a part of the documentation:
+ 
+  - Destroying any node also destroys all of its descendants.
+  - Can't find libLLVM-4.0.so?  http://stackoverflow.com/questions/17889799/libraries-in-usr-local-lib-not-found
+  

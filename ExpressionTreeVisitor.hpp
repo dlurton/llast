@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "Expr.hpp"
+#include "AST.hpp"
 
 namespace llast {
 
@@ -17,10 +17,10 @@ namespace llast {
         virtual void cleanUp() {}
 
         /** Executes before every node is visited. */
-        virtual void visitingNode(const Expr *expr) {}
+        virtual void visitingNode(const Node *expr) {}
 
         /** Executes after every node is visited. */
-        virtual void visitedNode(const Expr *expr) {}
+        virtual void visitedNode(const Node *expr) {}
 
         virtual void visitingBlock(const Block *expr) {}
 
@@ -45,6 +45,13 @@ namespace llast {
         virtual void visitingAssignVariable(const AssignVariable *expr) {}
 
         virtual void visitedAssignVariable(const AssignVariable *expr) {}
+
+        virtual void visitingFunction(const Function *func) {}
+        virtual void visitedFunction(const Function *func) {}
+
+        virtual void visitingModule(const Module *module) {}
+        virtual void visitedModule(const Module *module) {}
+
     };
 
 }
