@@ -17,40 +17,40 @@ namespace llast {
         virtual void cleanUp() {}
 
         /** Executes before every node is visited. */
-        virtual void visitingNode(const Node *expr) {}
+        virtual void visitingNode(const Node *) { }
 
         /** Executes after every node is visited. */
-        virtual void visitedNode(const Node *expr) {}
+        virtual void visitedNode(const Node *) {}
 
-        virtual void visitingBlock(const Block *expr) {}
+        virtual void visitingBlock(const Block *) {}
 
-        virtual void visitedBlock(const Block *expr) {}
+        virtual void visitedBlock(const Block *) {}
 
-        virtual void visitingConditional(const Conditional *expr) {}
+        virtual void visitingConditional(const Conditional *) {}
 
-        virtual void visitedConditional(const Conditional *expr) {}
+        virtual void visitedConditional(const Conditional *) {}
 
-        virtual void visitingBinary(const Binary *expr) {}
+        virtual void visitingBinary(const Binary *) {}
 
-        virtual void visitedBinary(const Binary *expr) {}
+        virtual void visitedBinary(const Binary *) {}
 
-        virtual void visitLiteralInt32(const LiteralInt32 *expr) {}
-        virtual void visitLiteralFloat(const LiteralFloat *expr) {}
+        virtual void visitLiteralInt32(const LiteralInt32 *) {}
+        virtual void visitLiteralFloat(const LiteralFloat *) {}
 
-        virtual void visitingReturn(const Return *expr) {}
-        virtual void visitedReturn(const Return *expr) {}
+        virtual void visitingReturn(const Return *) {}
+        virtual void visitedReturn(const Return *) {}
 
-        virtual void visitVariableRef(const VariableRef *expr) {}
+        virtual void visitVariableRef(const VariableRef *) {}
 
-        virtual void visitingAssignVariable(const AssignVariable *expr) {}
+        virtual void visitingAssignVariable(const AssignVariable *) {}
 
-        virtual void visitedAssignVariable(const AssignVariable *expr) {}
+        virtual void visitedAssignVariable(const AssignVariable *) {}
 
-        virtual void visitingFunction(const Function *func) {}
-        virtual void visitedFunction(const Function *func) {}
+        virtual void visitingFunction(const Function *) {}
+        virtual void visitedFunction(const Function *) {}
 
-        virtual void visitingModule(const Module *module) {}
-        virtual void visitedModule(const Module *module) {}
+        virtual void visitingModule(const Module *) {}
+        virtual void visitedModule(const Module *) {}
 
     };
 

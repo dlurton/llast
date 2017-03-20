@@ -13,8 +13,7 @@ namespace llast {
         int indent_ = -1;
         std::ostream &out_;
 
-        void writeTabs(int changeIndentBy = 0) {
-            int finalTabCount = indent_ + changeIndentBy;
+        void writeTabs() {
             for(int i = 0; i < indent_; ++i)
                 out_ << "\t";
         }
@@ -28,13 +27,13 @@ namespace llast {
             out_ << "\n";
         }
 
-        void visitingNode(const Node *node) override {
+        void visitingNode(const Node *) override {
             indent_++;
             out_ << "\n";
             writeTabs();
         }
 
-        void visitedNode(const Node *node) override {
+        void visitedNode(const Node *) override {
             indent_--;
         }
 
@@ -64,12 +63,6 @@ namespace llast {
             }
         }
 
-        void visitedBlock(const Block *expr) override {
-//            out_ << "\n";
-//            writeTabs(-1);
-//            out_ << "}";
-        }
-
         void visitingBinary(const Binary *expr) override {
             out_ << "Binary: " << to_string(expr->operation());
         }
@@ -85,7 +78,7 @@ namespace llast {
             out_ << "VariableRef: " << expr->name();
         }
 
-        void visitingConditional(const Conditional *expr) override {
+        void visitingConditional(const Conditional *) override {
             out_ << "Conditional: ";
         }
 
@@ -93,7 +86,7 @@ namespace llast {
             out_ << "AssignVariable: " << expr->name();
         }
 
-        virtual void visitingReturn(const Return *expr) override {
+        virtual void visitingReturn(const Return *) override {
             out_ << "Return: ";
         }
 
@@ -101,12 +94,9 @@ namespace llast {
             out_ << "Function: " << func->name();
         }
 
-        //virtual void visitedFunction(const Function *func) override {}
-
         virtual void visitingModule(const Module *module) override {
             out_ << "Module: " << module->name();
         }
 
-        //virtual void visitedModule(const Module *module) override {}
     };
 }

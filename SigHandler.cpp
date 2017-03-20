@@ -19,7 +19,7 @@
 // http://stackoverflow.com/questions/3151779/how-its-better-to-invoke-gdb-from-program-to-print-its-stacktrace/4611112#4611112
 char* exe = 0;
 
-int initialiseExecutableName()
+void initialiseExecutableName()
 {
     char link[1024];
     exe = new char[1024];
@@ -48,7 +48,7 @@ void bt_sighandler(int sig, siginfo_t *info, void *secret) {
 
     /* Do something useful with siginfo_t */
     if (sig == SIGSEGV) {
-        printf("Got signal %d, faulty address is %p, from %p\n", sig, info->si_addr, uc->uc_mcontext.gregs[REG_EIP]);
+        printf("Got signal %d, faulty address is %p, from 0x%llx\n", sig, info->si_addr, uc->uc_mcontext.gregs[REG_EIP]);
     } else {
         printf("Got signal %d\n", sig);
     }
@@ -73,12 +73,12 @@ void bt_sighandler(int sig, siginfo_t *info, void *secret) {
         }
 
         char syscom[256];
-        sprintf(syscom,"addr2line %p -e %.*s", trace[i] , p, messages[i] );
+        sprintf(syscom,"addr2line %p -e %.*s", trace[i], (int)p, messages[i] );
         //last parameter is the filename of the symbol
         system(syscom);
 
     }
-    exit(0);
+    exit(-1);
 }
 
 void initSigSegvHandler()

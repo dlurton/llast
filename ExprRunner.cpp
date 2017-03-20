@@ -47,27 +47,19 @@ namespace llast {
             module_ = llvm::make_unique<llvm::Module>(module->name(), context_);
         }
 
-        virtual void visitedModule(const Module *module) override {
-
-        }
-
         virtual void visitingFunction(const Function *func) override {
             std::vector<llvm::Type*> argTypes;
 
-            function_ = llvm::cast<llvm::Function>(module_->getOrInsertFunction(func->name(),
-                                                                                getType(func->returnType()),
-                                                                                nullptr));
+            function_ = llvm::cast<llvm::Function>(
+                    module_->getOrInsertFunction(func->name(),
+                    getType(func->returnType()),
+                    nullptr));
 
             block_ = llvm::BasicBlock::Create(context_, "functionBody", function_);
             irBuilder_.SetInsertPoint(block_);
 
 
         }
-
-        virtual void visitedFunction(const Function *func) override {
-
-        }
-
 
         virtual void initialize() override {
             llvm::InitializeNativeTarget();
@@ -96,8 +88,9 @@ namespace llast {
             ancestryStack_.push(expr);
         }
 
-        virtual void visitedNode(const Node *expr) override  {
+        virtual void visitedNode(const Node *expr) override {
             DEBUG_ASSERT(ancestryStack_.top() == expr, "Top node of ancestryStack_ should be the current node.");
+            UNUSED(expr);
             ancestryStack_.pop();
 
             //If the parent node of expr is a BlockExpr, the value left behind on valueStack_ is extraneous and
@@ -154,7 +147,7 @@ namespace llast {
             }
         }
 
-        virtual void visitedBlock(const Block *expr) override {
+        virtual void visitedBlock(const Block *) override {
             allocaScopeStack_.pop_back();
         }
 
@@ -231,7 +224,7 @@ namespace llast {
             valueStack_.push(irBuilder_.CreateLoad(allocaInst));
         }
 
-        void visitedReturn(const Return *expr) {
+        void visitedReturn(const Return *) {
             DEBUG_ASSERT(valueStack_.size() > 0, "")
             llvm::Value* retValue = valueStack_.top();
             valueStack_.pop();
@@ -248,7 +241,7 @@ namespace llast {
         std::vector<llvm::GenericValue> args_;
 
     public:
-        FunctionInvoker(llvm::Function *func, llvm::ExecutionEngine *ee) : ee_(ee), func_(func) {
+        FunctionInvoker(llvm::Function *func, llvm::ExecutionEngine *ee) : func_(func), ee_(ee) {
 
         }
 
