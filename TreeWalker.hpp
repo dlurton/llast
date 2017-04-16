@@ -1,14 +1,14 @@
 #pragma once
 
-#include "ExpressionTreeVisitor.hpp"
+#include "TreeVisitor.hpp"
 
 namespace llast {
     /** Default tree walker, suitable for most purposes */
     class ExpressionTreeWalker {
-        ExpressionTreeVisitor *visitor_;
+        TreeVisitor *visitor_;
 
     public:
-        ExpressionTreeWalker(ExpressionTreeVisitor *visitor) : visitor_{visitor} {
+        ExpressionTreeWalker(TreeVisitor *visitor) : visitor_{visitor} {
 
         }
 
@@ -16,12 +16,9 @@ namespace llast {
 
         }
 
-        void walkTree(const Module *expr) {
-            visitor_->initialize();
-
-            this->walkModule(expr);
-
-            visitor_->cleanUp();
+        static void walkTree(TreeVisitor &visitor, const Module *expr) {
+            ExpressionTreeWalker walker(&visitor);
+            walker.walkModule(expr);
         }
 
     protected:

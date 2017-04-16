@@ -5,8 +5,8 @@
 
 namespace llast {
 
-
     namespace ExprRunner {
+        void init();
         /** Just attempts to compile expr and discards any results. Used by to see if expr contains any
          * conditions that can throw CompileException.  TODO:  remove from public API. */
         void compile(unique_ptr<const Expr> expr);

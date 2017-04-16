@@ -1,14 +1,14 @@
 
 #pragma once
 
-#include "ExpressionTreeVisitor.hpp"
+#include "TreeVisitor.hpp"
 
 #include <iostream>
 #include <algorithm>
 
 namespace llast {
 
-    class PrettyPrinterVisitor : public ExpressionTreeVisitor {
+    class PrettyPrinterVisitor : public TreeVisitor {
     private:
         int indent_ = -1;
         std::ostream &out_;
@@ -22,10 +22,6 @@ namespace llast {
 
         PrettyPrinterVisitor(std::ostream &out) : out_(out) { }
         ~PrettyPrinterVisitor() { }
-
-        void cleanUp() override {
-            out_ << "\n";
-        }
 
         void visitingNode(const Node *) override {
             indent_++;
@@ -98,5 +94,8 @@ namespace llast {
             out_ << "Module: " << module->name();
         }
 
+        virtual void visitedModule(const Module *) override {
+            out_ << "\n";
+        }
     };
 }

@@ -15,7 +15,7 @@
 #else
 #define DEBUG_ASSERT(arg, reason) //no op
 #endif
-#define UNUSED(x) ((void)(x))
+#define PREVENT_UNUSED_WARNING(x) ((void)(x))
 namespace llast {
 
     class Exception : public std::runtime_error {

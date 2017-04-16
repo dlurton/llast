@@ -62,7 +62,10 @@ To get llvm installed on your linux box, execute the following commands:
     cd llvm-4.0.0.src/
     mkdir build
     cd build
-    cmake .. -DLLVM_BUILD_LLVM_DYLIB=ON
+    cmake .. -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON -DLLVM_ENABLE_RTTI:BOOL=ON -DLLVM_ENABLE_EH:BOOL=ON -DLLVM_USE_SANITIZER:STRING=Address -DLLVM_ENABLE_ASSERTIONS:BOOL=ON -DLLVM_ENABLE_EXPENSIVE_CHECKS:BOOL=ON -DLLVM_BUILD_TOOLS:BOOL=OFF -DLLVM_BUILD_EXAMPLES:BOOL=OFF
+    cmake .. -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON -DLLVM_ENABLE_RTTI:BOOL=ON -DLLVM_ENABLE_EH:BOOL=ON
+     
+
     cmake --build .  -- -j <num cpu cores>
 
 Go make yourself some coffee, etc, blah blah.  Then, continue with:

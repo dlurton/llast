@@ -9,12 +9,8 @@ namespace llast {
      * Node types which do not have children will only have an overload of visit(...);  Node types that do have
      * children will have overloads for visiting(...) and visited(...) member functions.
      */
-    class ExpressionTreeVisitor {
+    class TreeVisitor {
     public:
-
-        virtual void initialize() {}
-
-        virtual void cleanUp() {}
 
         /** Executes before every node is visited. */
         virtual void visitingNode(const Node *) { }
