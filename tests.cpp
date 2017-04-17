@@ -2,132 +2,125 @@
 #include "ExprRunner.hpp"
 #include "SigHandler.hpp"
 
-#include "gtest/gtest.h"
+#define CATCH_CONFIG_RUNNER
+#include "catch.hpp"
 
 //https://github.com/google/googletest/blob/master/googletest/docs/Primer.md
 using namespace llast;
 
-namespace Int32Tests {
+int execInt32Expr(unique_ptr<const Expr> expr) {
+    return ExprRunner::runInt32Expr(make_unique<Return>(move(expr)));
+}
 
-    class Int32ExprTest : public ::testing::Test { };
+int execInt32Binary(int lvalue, OperationKind opKind, int rvalue, int expectedResult) {
+    std::unique_ptr<const Expr> binaryExpr = Binary::make(LiteralInt32::make(lvalue), opKind, LiteralInt32::make(rvalue));
+    int result = execInt32Expr(move(binaryExpr));
+    return result == expectedResult;
+}
 
-    int executeExpr(unique_ptr<const Expr> expr) {
-        return ExprRunner::runInt32Expr(make_unique<Return>(move(expr)));
+bool isEssentiallyEqual(float a, float b)
+{
+    const float allowedVariance = 0.000001;
+    const float diff = a - b;
+    return diff >= -allowedVariance && diff <= allowedVariance;
+}
+
+float execFloatExpr(unique_ptr<const Expr> expr) {
+    return ExprRunner::runFloatExpr(make_unique<Return>(move(expr)));
+}
+
+float execFloatBinary(float lvalue, OperationKind opKind, float rvalue, float expectedResult) {
+    std::unique_ptr<const Expr> binaryExpr = Binary::make(LiteralFloat::make(lvalue), opKind, LiteralFloat::make(rvalue));
+    float result = execFloatExpr(move(binaryExpr));
+
+    return isEssentiallyEqual(result, expectedResult);
+}
+
+bool assertCompileError(CompileError expectedError, unique_ptr<const Expr> expr) {
+    try {
+        ExprRunner::compile(move(expr));
+        std::cerr << "Compilation unexpectedly succeeded.\n";
+        return false;
+    } catch(CompileException &e) {
+        if(e.error() != expectedError) {
+            std::cerr << "Compilation failed for an unexpected reason.\n";
+            return false;
+        }
+        return true;
     }
+}
 
+TEST_CASE("Int32 tests") {
     //LiteralInt32
-    TEST_F(Int32ExprTest, CanReturnPositiveInt32) { ASSERT_EQ(1, executeExpr(make_unique<LiteralInt32>(1))); }
-    TEST_F(Int32ExprTest, CanReturnNegativeInt32) { ASSERT_EQ(-1, executeExpr(make_unique<LiteralInt32>(-1))); }
-    TEST_F(Int32ExprTest, CanReturnArbitraryPositiveInt32) { ASSERT_EQ(234944, executeExpr(make_unique<LiteralInt32>(234944))); }
-    TEST_F(Int32ExprTest, CanReturnArbitraryNegativeInt32) { ASSERT_EQ(-142344, executeExpr(make_unique<LiteralInt32>(-142344))); }
+    REQUIRE(execInt32Expr(LiteralInt32::make(1)) == 1);
+    REQUIRE(execInt32Expr(LiteralInt32::make(-1)) == -1);
+    REQUIRE(execInt32Expr(LiteralInt32::make(INT32_MAX)) == INT32_MAX);
+    REQUIRE(execInt32Expr(LiteralInt32::make(INT32_MIN)) == INT32_MIN);
 
     //Int32 Arithmetic
-    TEST_F(Int32ExprTest, CanAddInt32) {
-        ASSERT_EQ(3, executeExpr(make_unique<Binary>(make_unique<LiteralInt32>(1), OperationKind::Add, make_unique<LiteralInt32>(2))));
-    }
-    TEST_F(Int32ExprTest, CanSubInt32) {
-        ASSERT_EQ(5, executeExpr(make_unique<Binary>(make_unique<LiteralInt32>(6), OperationKind::Sub, make_unique<LiteralInt32>(1))));
-    }
-    TEST_F(Int32ExprTest, CanMulInt32)  {
-        ASSERT_EQ(15, executeExpr(make_unique<Binary>(make_unique<LiteralInt32>(5), OperationKind::Mul, make_unique<LiteralInt32>(3))));
-    }
-    TEST_F(Int32ExprTest, CanDivInt32)  {
-        ASSERT_EQ(8, executeExpr(make_unique<Binary>(make_unique<LiteralInt32>(16), OperationKind::Div, make_unique<LiteralInt32>(2))));
-    }
+    REQUIRE(execInt32Binary(1, OperationKind::Add, 2, 3));
+    REQUIRE(execInt32Binary(6, OperationKind::Sub, 1, 5));
+    REQUIRE(execInt32Binary(5, OperationKind::Mul, 3, 15));
+    REQUIRE(execInt32Binary(16, OperationKind::Div, 2, 8));
+    REQUIRE(execInt32Binary(1, OperationKind::Add, 2, 3));
 
-    //Int32 variable assignment
-    TEST_F(Int32ExprTest, CanAssignAndReturnInt32Variable)  {
+    SECTION("Int32 variable assignment") {
         auto var1 = make_shared<Variable>("var1", DataType::Int32);
         BlockBuilder bb;
         unique_ptr<const Block> block {
                 bb.addVariable(var1)
-                .addExpression(make_unique<AssignVariable>(var1, make_unique<LiteralInt32>(123)))
-                .addExpression(make_unique<Return>(make_unique<VariableRef>(var1)))
-                .build()
+                        .addExpression(make_unique<AssignVariable>(var1, LiteralInt32::make(123)))
+                        .addExpression(make_unique<Return>(make_unique<VariableRef>(var1)))
+                        .build()
         };
-
         unique_ptr<const Expr> expr{move(block)};
-        ASSERT_EQ(123, ExprRunner::runInt32Expr(move(expr)));
+        REQUIRE(ExprRunner::runInt32Expr(move(expr)) == 123);
     }
+}
 
-} //namespace Int32Tests
+TEST_CASE("Float tests") {
+    REQUIRE(execFloatExpr(LiteralFloat::make(1.0f)) == 1.0f);
+    REQUIRE(execFloatExpr(LiteralFloat::make(-1.0f)) == -1.0f);
+    REQUIRE(execFloatExpr(LiteralFloat::make(234944.0f)) == 234944.0f);
+    REQUIRE(execFloatExpr(LiteralFloat::make(-142344.0f)) == -142344.0f);
 
-namespace FloatTests {
+    REQUIRE(execFloatBinary(1.1f, OperationKind::Add, 2.2, 3.3f));
+    REQUIRE(execFloatBinary(6.2f, OperationKind::Sub, 1.1, 5.1f));
+    REQUIRE(execFloatBinary(5.25f, OperationKind::Mul, 3.0, 15.75f));
+    REQUIRE(execFloatBinary(7.0f, OperationKind::Div, 2.0, 3.5f));
 
-    class FloatExprTest : public ::testing::Test { };
-
-    bool isEssentiallyEqual(float a, float b)
-    {
-        const float allowedVariance = 0.000001;
-        const float diff = a - b;
-        return diff >= -allowedVariance && diff <= allowedVariance;
-    }
-
-    float executeExpr(unique_ptr<const Expr> expr) {
-        return ExprRunner::runFloatExpr(make_unique<Return>(move(expr)));
-    }
-
-    //LiteralFloat
-    TEST_F(FloatExprTest, CanReturnPositiveFloat) { ASSERT_EQ(1.0f, executeExpr(make_unique<LiteralFloat>(1.0f))); }
-    TEST_F(FloatExprTest, CanReturnNegativeFloat) { ASSERT_EQ(-1.0f, executeExpr(make_unique<LiteralFloat>(-1.0f))); }
-    TEST_F(FloatExprTest, CanReturnArbitraryPositiveFloat) { ASSERT_EQ(234944.0f, executeExpr(make_unique<LiteralFloat>(234944.0f))); }
-    TEST_F(FloatExprTest, CanReturnArbitraryNegativeFloat) { ASSERT_EQ(-142344.0f, executeExpr(make_unique<LiteralFloat>(-142344.0f))); }
-
-    //Float Arithmetic
-    TEST_F(FloatExprTest, CanAddFloat) {
-        float result = executeExpr(make_unique<Binary>(make_unique<LiteralFloat>(1.1f), OperationKind::Add, make_unique<LiteralFloat>(2.2)));
-        ASSERT_TRUE(isEssentiallyEqual(3.3f, result));
-    }
-    TEST_F(FloatExprTest, CanSubFloat) {
-        float result = executeExpr(make_unique<Binary>(make_unique<LiteralFloat>(6.2f), OperationKind::Sub, make_unique<LiteralFloat>(1.1f)));
-        ASSERT_TRUE(isEssentiallyEqual(5.1f, result));
-    }
-    TEST_F(FloatExprTest, CanMulFloat)  {
-        float result = executeExpr(make_unique<Binary>(make_unique<LiteralFloat>(5.25f), OperationKind::Mul, make_unique<LiteralFloat>(3.0f)));
-        ASSERT_TRUE(isEssentiallyEqual(15.75f, result));
-    }
-    TEST_F(FloatExprTest, CanDivFloat)  {
-        float result = executeExpr(make_unique<Binary>(make_unique<LiteralFloat>(7.0f), OperationKind::Div, make_unique<LiteralFloat>(2.0f)));
-        ASSERT_TRUE(isEssentiallyEqual(3.5f, result));
-    }
-
-    //Float variable assignment
-    TEST_F(FloatExprTest, CanAssignAndReturnFloatVariable)  {
+    SECTION("Float variable assignment") {
         shared_ptr<Variable> var1 = make_shared<Variable>("var1", DataType::Float);
         BlockBuilder bb;
         unique_ptr<const Block> block {
                 bb.addVariable(var1)
-                .addExpression(make_unique<AssignVariable>(var1, make_unique<LiteralFloat>(123.0f)))
+                .addExpression(AssignVariable::make(var1, LiteralFloat::make(123.0f)))
                 .addExpression(make_unique<Return>(make_unique<VariableRef>(var1)))
                 .build()
         };
 
         unique_ptr<const Expr> expr {move(block)};
-        ASSERT_EQ(123.0f, ExprRunner::runFloatExpr(move(expr)));
+        REQUIRE(ExprRunner::runFloatExpr(move(expr)) == 123.0f);
     }
-} //namespace FloatTests
+}
 
-namespace ErrorTests {
-    class ErrorTests : public ::testing::Test {  };
+TEST_CASE("Error conditions") {
 
-    void assertCompileError(CompileError expectedError, unique_ptr<const Expr> expr) {
-        try {
-            ExprRunner::compile(move(expr));
-            FAIL() << "Compilation unexpectedly succeeded.";
-        } catch(CompileException &e) {
-            ASSERT_EQ(expectedError, e.error()) << "Compilation failed for an unexpected reason.";
-        }
-    }
+    REQUIRE(assertCompileError(
+            CompileError::BinaryExprDataTypeMismatch,
+            Binary::make(LiteralFloat::make(1.0f), OperationKind::Add, LiteralInt32::make(1))));
 
-    TEST_F(ErrorTests, MismatchedDataTypeThowsException) {
-        assertCompileError(CompileError::BinaryExprDataTypeMismatch,
-                           make_unique<Binary>(make_unique<LiteralFloat>(1.0f), OperationKind::Add, make_unique<LiteralInt32>(1)));
-    }
-
-}//namespace ErrorTests
+}
 
 int main(int argc, char **argv) {
     initSigSegvHandler();
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    //llast::ExprRunner::init();
+
+    int result = Catch::Session().run( argc, argv );
+
+    //TODO?
+    //llvm::llvm_shutdown();
+
+    return ( result < 0xff ? result : 0xff );
+
 }

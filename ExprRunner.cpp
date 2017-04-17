@@ -178,6 +178,7 @@ namespace llast {
             valueStack_.push(result);
         }
 
+
         llvm::Value *createOperation(llvm::Value *lValue, llvm::Value *rValue, OperationKind op, DataType dataType) {
             switch(dataType) {
                 case DataType::Int32:
@@ -186,8 +187,11 @@ namespace llast {
                         case OperationKind::Sub: return irBuilder_.CreateSub(lValue, rValue);
                         case OperationKind::Mul: return irBuilder_.CreateMul(lValue, rValue);
                         case OperationKind::Div: return irBuilder_.CreateSDiv(lValue, rValue);
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "DuplicateSwitchCase"
                         default:
                             throw UnhandledSwitchCase();
+#pragma clang diagnostic pop
                     }
                 case DataType::Float:
                     switch(op) {
@@ -195,8 +199,11 @@ namespace llast {
                         case OperationKind::Sub: return irBuilder_.CreateFSub(lValue, rValue);
                         case OperationKind::Mul: return irBuilder_.CreateFMul(lValue, rValue);
                         case OperationKind::Div: return irBuilder_.CreateFDiv(lValue, rValue);
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "DuplicateSwitchCase"
                         default:
                             throw UnhandledSwitchCase();
+#pragma clang diagnostic pop
                     }
                 default:
                     throw UnhandledSwitchCase();
@@ -212,7 +219,7 @@ namespace llast {
         }
 
         llvm::Value *getConstantInt32(int value) {
-            return llvm::ConstantInt::get(context_, llvm::APInt(32, value, true));
+            return llvm::ConstantInt::get(context_, llvm::APInt(32, (uint64_t)value, true));
         }
 
         llvm::Value *getConstantFloat(float value) {
@@ -224,7 +231,7 @@ namespace llast {
             valueStack_.push(irBuilder_.CreateLoad(allocaInst));
         }
 
-        void visitedReturn(const Return *) {
+        void visitedReturn(const Return *) override {
             DEBUG_ASSERT(valueStack_.size() > 0, "")
             llvm::Value* retValue = valueStack_.top();
             valueStack_.pop();
@@ -293,12 +300,12 @@ namespace llast {
 
         void addModule(const Module *module) {
 
-            prettyPrint(module);
+            //prettyPrint(module);
 
             llast::CodeGenVisitor visitor{ context_};
             ExpressionTreeWalker walker{&visitor};
             walker.walkTree(module);
-            visitor.dumpIL();
+            //visitor.dumpIL();
 
             std::unique_ptr<llvm::Module> llvmModule = visitor.releaseLlvmModuleOwnership();
             if(!ee_) {
@@ -327,7 +334,7 @@ namespace llast {
 
                 auto ec = make_unique<ExecutionContext>();
                 ec->addModule(module.get());
-                return move(ec);
+                return ec;
             }
         }
 
