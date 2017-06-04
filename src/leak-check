@@ -1,0 +1,4 @@
+#!/bin/bash -e
+
+valgrind --leak-check=yes ./cmake-build-debug/tests
+

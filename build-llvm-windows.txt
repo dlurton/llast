@@ -1,0 +1,29 @@
+I sure wish there was a way to build only the LLVM stuff needed for the native arch.
+
+Install github for visual studio
+Install github for windows
+
+commands:
+
+  
+  http://llvm.org/docs/GettingStartedVS.html
+	install python
+	install GnuWin32Tools 
+	
+	
+	$(SolutionDir)\llvm-stable				is a "scratch" directory for the llvm source code
+	$(SolutionDir)\llvm-stable\cmake 		is the directory containing the cmake cache
+	$(SolutionDir)\llvm-stable\src			is where the llvm source code goes
+
+
+	mkdir llvm-stable
+	cd llvm-stable
+	git clone git@github.com:llvm-mirror/llvm.git
+	mv llvm src
+	mkdir cmake 
+	cd cmake 	
+	#useful info about getting a 64-bit build of LLVM libraries on windows: https://github.com/boostorg/hana/wiki/Setting-up-Clang-on-Windows
+	cmake -G "Visual Studio 15 2017 Win64" -Thost=x64 /p:Platform=x64 -DLLVM_TARGETS_TO_BUILD:STRING="X86" -DLLVM_BUILD_32_BITS:BOOL=OFF -DLLVM_BUILD_TOOLS:BOOL=OFF -DLLVM_INCLUDE_TOOLS:BOOL=OFF -DLLVM_BUILD_EXAMPLES:BOOL=OFF -DLLVM_INCLUDE_EXAMPLES:BOOL=OFF -DLLVM_ENABLE_RTTI:BOOL=ON -DLLVM_ENABLE_EH:BOOL=ON -DLLVM_INCLUDE_EXAMPLES:BOOL=OFF -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON -DCMAKE_INSTALL_PREFIX:PATH=../../externs/llvm ../src
+	
+	cmake --build .
+	cmake --build . --target install
