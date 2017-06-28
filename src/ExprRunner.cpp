@@ -285,16 +285,15 @@ namespace llast {
     public:
         ExecutionContext() {
             //NOTE:  it is legal to call these multiple times.
-            llvm::InitializeNativeTarget();
-            llvm::InitializeNativeTargetAsmPrinter();
-            llvm::InitializeNativeTargetAsmParser();
+            llvm::InitializeAllTargets();
+            llvm::InitializeAllAsmPrinters();
+            llvm::InitializeAllAsmParsers();
         }
 
 
         FunctionInvoker getFunctionInvoker(std::string name) {
             //TODO:  FindFunctionNamed() is slow...build std::unordered_map of functions
             llvm::Function *function = ee_->FindFunctionNamed(name.c_str());
-
             return FunctionInvoker{function, ee_.get()};
         }
 
@@ -311,7 +310,9 @@ namespace llast {
             if(!ee_) {
                 llvm::EngineBuilder builder {move(llvmModule)};
                 //builder.setUseOrcMCJITReplacement(true);
-                ee_ = std::unique_ptr<llvm::ExecutionEngine>{builder.create()};
+                auto target = builder.selectTarget();
+                llvm::ExecutionEngine *engine = builder.create(target);
+                ee_ = std::unique_ptr<llvm::ExecutionEngine>{engine};
             } else {
                 ee_->addModule(std::move(llvmModule));
             }
