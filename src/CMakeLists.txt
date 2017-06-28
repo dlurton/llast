@@ -10,7 +10,17 @@ link_directories(../externs/llvm/lib/)
 
 # -fsanitize=address
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS1} -Wall -pedantic -Wextra -ggdb -fno-omit-frame-pointer -O0 -fno-optimize-sibling-calls -fstack-protector-all")
-set(SOURCE_FILES Exception.hpp AST.hpp ExpressionTreeVisitor.hpp PrettyPrinter.hpp AST.cpp ExprRunner.hpp ExprRunner.cpp tests.cpp ExprRunner.hpp)
+set(SOURCE_FILES
+        Exception.hpp
+        AST.hpp
+        ExpressionTreeVisitor.hpp
+        ExpressionTreeWalker.hpp
+        PrettyPrinter.hpp
+        AST.cpp
+        ExprRunner.hpp
+        ExprRunner.cpp
+        tests.cpp
+        ExprRunner.hpp)
 
 #LLVM stuff
 set(LLVM_DIR ../externs/llvm/lib/cmake/llvm)
