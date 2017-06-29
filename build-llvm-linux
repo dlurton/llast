@@ -17,7 +17,7 @@ LLVM_INSTALL_DIR=$EXTERNS_DIR/llvm
 SCRATCH_DIR=$EXTERNS_DIR/scratch
 LLVM_SRC_DIR=$SCRATCH_DIR/llvm
 LLVM_CMAKE_DIR=$SCRATCH_DIR/llvm-cmake
-LLVM_BRANCH=release_40
+LLVM_BRANCH=master
 NUM_CORES=`grep -c ^processor /proc/cpuinfo`
 
 
@@ -47,7 +47,7 @@ else
 	git pull
 fi
 
-say "Switching to stable $LLVM_BRANCH"
+say "Switching to LLVM branch $LLVM_BRANCH"
 cd $LLVM_SRC_DIR
 git checkout $LLVM_BRANCH
 
@@ -85,6 +85,7 @@ say "Building LLVM"
 cmake --build $LLVM_CMAKE_DIR -- -j $NUM_CORES
 
 say "Installing LLVM at" $LLVM_INSTALL_DIR
+rm -rf $LLVM_INSTALL_DIR
 cmake --build $LLVM_CMAKE_DIR --target install
 
 say "LLVM Built and Installed successfully at" $LLVM_INSTALL_DIR

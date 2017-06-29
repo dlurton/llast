@@ -1,3 +1,4 @@
+#include <llvm/Support/ManagedStatic.h>
 #include "AST.hpp"
 #include "ExprRunner.hpp"
 #include "SigHandler.hpp"
@@ -115,13 +116,14 @@ TEST_CASE("Error conditions") {
 int main(int argc, char **argv) {
 #ifdef __linux__
     initSigSegvHandler();
-#endif 
-	//llast::ExprRunner::init();
+#endif
+
+    ExprRunner::init();
 
     int result = Catch::Session().run( argc, argv );
 
     //TODO?
-    //llvm::llvm_shutdown();
+    llvm::llvm_shutdown();
 
     return ( result < 0xff ? result : 0xff );
 

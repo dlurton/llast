@@ -1,32 +1,36 @@
-// https://github.com/llvm-mirror/llvm/tree/master/examples
-
 #include "ExprRunner.hpp"
 #include "ExpressionTreeVisitor.hpp"
 #include "ExpressionTreeWalker.hpp"
 #include "PrettyPrinter.hpp"
 
 #include <map>
-
 #include <stack>
 
-#include "llvm/Analysis/Passes.h"
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/ExecutionEngine/ObjectCache.h"
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/IRReader/IRReader.h"
-#include "llvm/Support/Path.h"
-#include "llvm/Support/SourceMgr.h"
+#include "llvm/IR/Mangler.h"
+
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/ExecutionEngine/GenericValue.h"
+#include "llvm/Support/DynamicLibrary.h"
+
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/RuntimeDyld.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+
+#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+#include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
+#include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
+#include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
+
+#pragma GCC diagnostic pop
 
 namespace llast {
-
     class CodeGenVisitor : public ExpressionTreeVisitor {
         llvm::LLVMContext &context_;
+        llvm::TargetMachine &targetMachine_;
         llvm::IRBuilder<> irBuilder_;
         std::unique_ptr<llvm::Module> module_;
         llvm::Function* function_;
@@ -40,11 +44,16 @@ namespace llast {
         std::stack<const Node*> ancestryStack_;
 
     public:
-        CodeGenVisitor(llvm::LLVMContext &context)
-                : context_(context), irBuilder_{context} { }
+        CodeGenVisitor(llvm::LLVMContext &context, llvm::TargetMachine &targetMachine)
+                : context_{context}, targetMachine_{targetMachine}, irBuilder_{context} { }
 
         virtual void visitingModule(const Module *module) override {
             module_ = llvm::make_unique<llvm::Module>(module->name(), context_);
+            module_->setDataLayout(targetMachine_.createDataLayout());
+        }
+
+        virtual void visitedModule(const Module *) override {
+            DEBUG_ASSERT(valueStack_.size() == 0, "When compilation complete, no values should remain.");
         }
 
         virtual void visitingFunction(const Function *func) override {
@@ -52,27 +61,13 @@ namespace llast {
 
             function_ = llvm::cast<llvm::Function>(
                     module_->getOrInsertFunction(func->name(),
-                    getType(func->returnType()),
-                    nullptr));
+                                                 getType(func->returnType())));
 
             block_ = llvm::BasicBlock::Create(context_, "functionBody", function_);
             irBuilder_.SetInsertPoint(block_);
-
-
         }
 
-        virtual void initialize() override {
-            llvm::InitializeNativeTarget();
-            llvm::InitializeNativeTargetAsmPrinter();
-            llvm::InitializeNativeTargetAsmParser();
-        }
-
-        virtual void cleanUp() override {
-            //DEBUG_ASSERT(scopeStack_.size() == 0, "When compilation complete, no scopes should remain.");
-            DEBUG_ASSERT(valueStack_.size() == 0, "When compilation complete, no values should remain.");
-        }
-
-        void dumpIL() {
+        void dumpIR() {
             std::cout << "LLVM IL:\n";
             module_->print(llvm::outs(), nullptr);
         }
@@ -83,21 +78,19 @@ namespace llast {
             return std::move(module_);
         }
 
-
         virtual void visitingNode(const Node *expr) override {
             ancestryStack_.push(expr);
         }
 
         virtual void visitedNode(const Node *expr) override {
             DEBUG_ASSERT(ancestryStack_.top() == expr, "Top node of ancestryStack_ should be the current node.");
-            UNUSED(expr);
             ancestryStack_.pop();
 
             //If the parent node of expr is a BlockExpr, the value left behind on valueStack_ is extraneous and
             //should be removed.  (This is a consequence of "everything is an expression.")
             if(ancestryStack_.size() >= 1
-               && ancestryStack_.top()->nodeKind() == NodeKind::Block
-               &&  valueStack_.size() > 0) {
+               && expr->nodeKind() == NodeKind::Block
+               && valueStack_.size() > 0) {
                 valueStack_.pop();
             }
         }
@@ -118,9 +111,9 @@ namespace llast {
             AllocaScope &topScope = allocaScopeStack_.back();
 
             for(auto var : expr->scope()->variables()) {
-                 if(topScope.find(var->name()) != topScope .end()) {
+                if(topScope.find(var->name()) != topScope.end()) {
                     throw InvalidStateException("More than one variable named '" + var->name() +
-                                                        "' was defined in the current scope.");
+                                                "' was defined in the current scope.");
                 }
 
                 llvm::Type *type{getType(var->dataType())};
@@ -164,6 +157,7 @@ namespace llast {
         virtual void visitedBinary(const Binary *expr) override {
 
             if(expr->lValue()->dataType() != expr->rValue()->dataType()) {
+                //throw std::runtime_error("Crapola");
                 throw CompileException(CompileError::BinaryExprDataTypeMismatch,
                                        "Data types of lvalue and rvalue in binary expression do not match");
             }
@@ -178,7 +172,6 @@ namespace llast {
             valueStack_.push(result);
         }
 
-
         llvm::Value *createOperation(llvm::Value *lValue, llvm::Value *rValue, OperationKind op, DataType dataType) {
             switch(dataType) {
                 case DataType::Int32:
@@ -187,11 +180,8 @@ namespace llast {
                         case OperationKind::Sub: return irBuilder_.CreateSub(lValue, rValue);
                         case OperationKind::Mul: return irBuilder_.CreateMul(lValue, rValue);
                         case OperationKind::Div: return irBuilder_.CreateSDiv(lValue, rValue);
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "DuplicateSwitchCase"
                         default:
                             throw UnhandledSwitchCase();
-#pragma clang diagnostic pop
                     }
                 case DataType::Float:
                     switch(op) {
@@ -199,11 +189,8 @@ namespace llast {
                         case OperationKind::Sub: return irBuilder_.CreateFSub(lValue, rValue);
                         case OperationKind::Mul: return irBuilder_.CreateFMul(lValue, rValue);
                         case OperationKind::Div: return irBuilder_.CreateFDiv(lValue, rValue);
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "DuplicateSwitchCase"
                         default:
                             throw UnhandledSwitchCase();
-#pragma clang diagnostic pop
                     }
                 default:
                     throw UnhandledSwitchCase();
@@ -219,7 +206,8 @@ namespace llast {
         }
 
         llvm::Value *getConstantInt32(int value) {
-            return llvm::ConstantInt::get(context_, llvm::APInt(32, (uint64_t)value, true));
+            llvm::ConstantInt *constantInt = llvm::ConstantInt::get(context_, llvm::APInt(32, value, true));
+            return constantInt;
         }
 
         llvm::Value *getConstantFloat(float value) {
@@ -240,99 +228,128 @@ namespace llast {
 
     }; // class CodeGenVisitor
 
-    //TODO:  make this a PIMPL with a public interface
-    class FunctionInvoker {
-        llvm::Function *func_;
-        llvm::ExecutionEngine *ee_;
 
-        std::vector<llvm::GenericValue> args_;
+    //The llvm::orc::createResolver(...) version of this doesn't seem to work for some reason...
+    template <typename DylibLookupFtorT, typename ExternalLookupFtorT>
+    std::unique_ptr<llvm::orc::LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>>
+    createLambdaResolver2(DylibLookupFtorT DylibLookupFtor, ExternalLookupFtorT ExternalLookupFtor) {
+        typedef llvm::orc::LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT> LR;
+        return std::make_unique<LR>(DylibLookupFtor, ExternalLookupFtor);
+    }
+
+    /** This class originally taken from:
+     * https://github.com/llvm-mirror/llvm/blob/master/examples/Kaleidoscope/include/KaleidoscopeJIT.h
+     */
+    class SimpleJIT {
+    private:
+        std::unique_ptr<llvm::TargetMachine> TM;
+        const llvm::DataLayout DL;
+        llvm::orc::RTDyldObjectLinkingLayer ObjectLayer;
+        llvm::orc::IRCompileLayer<decltype(ObjectLayer), llvm::orc::SimpleCompiler> CompileLayer;
 
     public:
-        FunctionInvoker(llvm::Function *func, llvm::ExecutionEngine *ee) : func_(func), ee_(ee) {
+        using ModuleHandle = decltype(CompileLayer)::ModuleHandleT;
 
+        SimpleJIT()
+                : TM(llvm::EngineBuilder().selectTarget()), DL(TM->createDataLayout()),
+                  CompileLayer(ObjectLayer, llvm::orc::SimpleCompiler(*TM)) {
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
         }
 
-        FunctionInvoker &addArg(int value) {
-            args_.emplace_back();
-            args_[args_.size() - 1].IntVal = llvm::APInt(32, value);
-            return *this;
+        llvm::TargetMachine &getTargetMachine() { return *TM; }
+
+        ModuleHandle addModule(std::shared_ptr<llvm::Module> M) {
+            // Build our symbol resolver:
+            // Lambda 1: Look back into the JIT itself to find symbols that are part of
+            //           the same "logical dylib".
+            // Lambda 2: Search for external symbols in the host process.
+            auto Resolver = createLambdaResolver2(
+                    [&](const std::string &Name) {
+                        if (auto Sym = CompileLayer.findSymbol(Name, false))
+                            return Sym;
+                        return llvm::JITSymbol(nullptr);
+                    },
+                    [](const std::string &Name) {
+                        if (auto SymAddr =
+                                llvm::RTDyldMemoryManager::getSymbolAddressInProcess(Name))
+                            return llvm::JITSymbol(SymAddr, llvm::JITSymbolFlags::Exported);
+                        return llvm::JITSymbol(nullptr);
+                    });
+
+            // Add the set to the JIT with the resolver we created above and a newly
+            // created SectionMemoryManager.
+            return CompileLayer.addModule(M, std::make_unique<llvm::SectionMemoryManager>(), std::move(Resolver));
         }
 
-        float invokeFloat() {
-            llvm::GenericValue gv = ee_->runFunction(func_, args_);
-            return gv.FloatVal;
+        llvm::JITSymbol findSymbol(const std::string Name) {
+            std::string MangledName;
+            llvm::raw_string_ostream MangledNameStream(MangledName);
+            llvm::Mangler::getNameWithPrefix(MangledNameStream, Name, DL);
+            return CompileLayer.findSymbol(MangledNameStream.str(), true);
         }
 
-        int invokeInt32() {
-            llvm::GenericValue gv = ee_->runFunction(func_, args_);
-            return (int)gv.IntVal.getSExtValue();
+        void removeModule(ModuleHandle H) {
+            CompileLayer.removeModule(H);
         }
-    };
+    }; //SimpleJIT
 
     //TODO:  make this a PIMPL with a public interface
     class ExecutionContext {
-        //NOTE:  the order of definition here is significant!
-        //context_ must be destroyed AFTER ee_!
-        llvm::LLVMContext context_;
-        unique_ptr<llvm::ExecutionEngine> ee_;
+        //TODO:  determine if definition order (destruction order) is still significant, and if so
+        //update this note to say so.
 
-        void prettyPrint(const Module *module) {
+        llvm::LLVMContext context_;
+        std::unique_ptr<SimpleJIT> jit_ = std::make_unique<SimpleJIT>();
+
+        static void prettyPrint(const Module *module) {
             llast::PrettyPrinterVisitor visitor{std::cout};
             ExpressionTreeWalker walker{&visitor};
             walker.walkTree(module);
         }
 
     public:
-        ExecutionContext() {
-            //NOTE:  it is legal to call these multiple times.
-            llvm::InitializeAllTargets();
-            llvm::InitializeAllAsmPrinters();
-            llvm::InitializeAllAsmParsers();
-        }
 
+        uint64_t getSymbolAddress(const std::string &name) {
+            llvm::JITSymbol symbol = jit_->findSymbol(name);
 
-        FunctionInvoker getFunctionInvoker(std::string name) {
-            //TODO:  FindFunctionNamed() is slow...build std::unordered_map of functions
-            llvm::Function *function = ee_->FindFunctionNamed(name.c_str());
-            return FunctionInvoker{function, ee_.get()};
+            if(!symbol)
+                return 0;
+
+            uint64_t retval = symbol.getAddress();
+            return retval;
         }
 
         void addModule(const Module *module) {
-
             //prettyPrint(module);
-
-            llast::CodeGenVisitor visitor{ context_};
+            llast::CodeGenVisitor visitor{ context_, jit_->getTargetMachine()};
             ExpressionTreeWalker walker{&visitor};
             walker.walkTree(module);
-            //visitor.dumpIL();
 
-            std::unique_ptr<llvm::Module> llvmModule = visitor.releaseLlvmModuleOwnership();
-            if(!ee_) {
-                llvm::EngineBuilder builder {move(llvmModule)};
-                //builder.setUseOrcMCJITReplacement(true);
-                auto target = builder.selectTarget();
-                llvm::ExecutionEngine *engine = builder.create(target);
-                ee_ = std::unique_ptr<llvm::ExecutionEngine>{engine};
-            } else {
-                ee_->addModule(std::move(llvmModule));
-            }
+            //visitor.dumpIR();
+            unique_ptr<llvm::Module> llvmModule = visitor.releaseLlvmModuleOwnership();
+            jit_->addModule(move(llvmModule));
         }
     };
 
     namespace ExprRunner {
+
+        void init() {
+            llvm::InitializeNativeTarget();
+            llvm::InitializeNativeTargetAsmPrinter();
+            llvm::InitializeNativeTargetAsmParser();
+        }
+
         namespace {
-            const char *FUNC_NAME = "exprFunc";
+            const string FUNC_NAME = "exprFunc";
 
             std::unique_ptr<ExecutionContext> makeExecutionContext(unique_ptr<const Expr> expr) {
-                ModuleBuilder mb{"ExprModule"};
-
                 FunctionBuilder fb{FUNC_NAME, expr->dataType()};
                 BlockBuilder &bb = fb.blockBuilder();
                 bb.addExpression(move(expr));
 
+                ModuleBuilder mb{"ExprModule"};
                 mb.addFunction(fb.build());
                 unique_ptr<const Module> module{mb.build()};
-
                 auto ec = make_unique<ExecutionContext>();
                 ec->addModule(module.get());
                 return ec;
@@ -349,28 +366,37 @@ namespace llast {
 
             std::unique_ptr<const Module> m{mb.build()};
             llvm::LLVMContext ctx;
-            llast::CodeGenVisitor visitor{ctx};
+            auto tm = unique_ptr<llvm::TargetMachine>(llvm::EngineBuilder().selectTarget());
+            llast::CodeGenVisitor visitor{ctx, *tm.get()};
             ExpressionTreeWalker walker{&visitor};
             walker.walkTree(m.get());
         }
 
         float runFloatExpr(unique_ptr<const Expr> expr) {
+            typedef float (*FloatFuncPtr)(void);
+
             if(expr->dataType() != DataType::Float) {
                 throw FatalException("expr->dataType() != DataType::Float");
             }
+
             unique_ptr<ExecutionContext> ec{makeExecutionContext(move(expr))};
-            auto invoker = ec->getFunctionInvoker(FUNC_NAME);
-            return invoker.invokeFloat();
+            auto funcPtr = reinterpret_cast<FloatFuncPtr>(ec->getSymbolAddress(FUNC_NAME));
+            float retval = funcPtr();
+            return retval;
         }
 
-
         int runInt32Expr(unique_ptr<const Expr> expr) {
+            typedef int (*IntFuncPtr)(void);
+
             if(expr->dataType() != DataType::Int32) {
                 throw FatalException("expr->dataType() != DataType::Int32");
             }
+
             unique_ptr<ExecutionContext> ec{makeExecutionContext(move(expr))};
-            auto invoker = ec->getFunctionInvoker(FUNC_NAME);
-            return invoker.invokeInt32();
+            auto funcPtr = reinterpret_cast<IntFuncPtr>(ec->getSymbolAddress(FUNC_NAME));
+            int retval = funcPtr();
+            return retval;
         }
     } //namespace ExprRunner
 } //namespace float
+
